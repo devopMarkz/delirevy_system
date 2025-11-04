@@ -1,0 +1,127 @@
+version: '3.8'
+
+services:
+  # API Gateway
+  api-gateway:
+    build: ./api-gateway
+    platform: linux/amd64
+    ports:
+      - "8000:8000"
+    environment:
+      - PEDIDOS_SERVICE_URL=http://pedidos-service:8001
+      - RESTAURANTES_SERVICE_URL=http://restaurantes-service:8002
+      - PAGAMENTOS_SERVICE_URL=http://pagamentos-service:8003
+    depends_on:
+      - pedidos-service
+      - restaurantes-service
+      - pagamentos-service
+    networks:
+      - delivery-network
+
+  # Pedidos Service
+  pedidos-service:
+    build: ./pedidos-service
+    platform: linux/amd64
+    ports:
+      - "8001:8001"
+    environment:
+      - DATABASE_URL=postgresql://user:password@pedidos-db:5432/pedidosdb
+      - REDIS_URL=redis://redis:6379
+      - RESTAURANTES_SERVICE_URL=http://restaurantes-service:8002
+      - PAGAMENTOS_SERVICE_URL=http://pagamentos-service:8003
+    depends_on:
+      - pedidos-db
+      - redis
+    networks:
+      - delivery-network
+
+  # Restaurantes Service
+  restaurantes-service:
+    build: ./restaurantes-service
+    platform: linux/amd64
+    ports:
+      - "8002:8002"
+    environment:
+      - DATABASE_URL=postgresql://user:password@restaurantes-db:5432/restaurantesdb
+      - REDIS_URL=redis://redis:6379
+    depends_on:
+      - restaurantes-db
+      - redis
+    networks:
+      - delivery-network
+
+  # Pagamentos Service
+  pagamentos-service:
+    build: ./pagamentos-service
+    platform: linux/amd64
+    ports:
+      - "8003:8003"
+    environment:
+      - DATABASE_URL=postgresql://user:password@pagamentos-db:5432/pagamentosdb
+      - REDIS_URL=redis://redis:6379
+      - PAGARME_API_KEY=ak_test_123456
+    depends_on:
+      - pagamentos-db
+      - redis
+    networks:
+      - delivery-network
+
+  # Databases
+  pedidos-db:
+    image: postgres:13
+    environment:
+      - POSTGRES_DB=pedidosdb
+      - POSTGRES_USER=user
+      - POSTGRES_PASSWORD=password
+    ports:
+      - "5432:5432"
+    networks:
+      - delivery-network
+    volumes:
+      - pedidos_data:/var/lib/postgresql/data
+
+  restaurantes-db:
+    image: postgres:13
+    environment:
+      - POSTGRES_DB=restaurantesdb
+      - POSTGRES_USER=user
+      - POSTGRES_PASSWORD=password
+    ports:
+      - "5433:5432"
+    networks:
+      - delivery-network
+    volumes:
+      - restaurantes_data:/var/lib/postgresql/data
+
+  pagamentos-db:
+    image: postgres:13
+    environment:
+      - POSTGRES_DB=pagamentosdb
+      - POSTGRES_USER=user
+      - POSTGRES_PASSWORD=password
+    ports:
+      - "5434:5432"
+    networks:
+      - delivery-network
+    volumes:
+      - pagamentos_data:/var/lib/postgresql/data
+
+  # Redis
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    networks:
+      - delivery-network
+    volumes:
+      - redis_data:/data
+
+networks:
+  delivery-network:
+    driver: bridge
+
+volumes:
+  pedidos_data:
+  restaurantes_data:
+  pagamentos_data:
+  redis_data:
