@@ -7,6 +7,7 @@ import json
 import uuid
 import requests
 import os
+import threading  # ADICIONE ESTE IMPORT
 from typing import List
 
 # Criar tabelas
@@ -20,6 +21,50 @@ app = FastAPI(
 
 # Redis
 redis_client = redis.Redis(host='redis', port=6379, decode_responses=True)
+
+# LISTENER ASSÍNCRONO PARA EVENTOS DE PEDIDOS
+def escutar_eventos_pedidos():
+    """Escuta eventos de pedidos para analytics e monitoramento"""
+    pubsub = redis_client.pubsub()
+    pubsub.subscribe('pedidos')
+    
+    print("🎧 Pagamentos Service: Iniciando listener de eventos de pedidos...")
+    
+    for message in pubsub.listen():
+        if message['type'] == 'message':
+            try:
+                evento = json.loads(message['data'])
+                
+                if evento.get('tipo') == 'PEDIDO_CRIADO':
+                    pedido_id = evento['pedido_id']
+                    total = evento['total']
+                    cliente_id = evento['cliente_id']
+                    
+                    print(f"💰 ANALYTICS: Novo pedido {pedido_id} criado")
+                    print(f"   👤 Cliente: {cliente_id}")
+                    print(f"   💰 Valor: R$ {total}")
+                    print(f"   📊 Registrado no sistema de analytics de pagamentos")
+                    
+                    # Em um sistema real, poderia:
+                    # - Salvar em banco de analytics
+                    # - Pré-processar para fraud detection
+                    # - Atualizar métricas em tempo real
+                    
+                elif evento.get('tipo') == 'PEDIDO_STATUS_ATUALIZADO':
+                    pedido_id = evento['pedido_id']
+                    status = evento['status']
+                    
+                    print(f"🔄 STATUS PEDIDO: Pedido {pedido_id} atualizado para: {status}")
+                    
+                    # Monitorar mudanças de status que podem afetar pagamentos
+                    if status in ['CANCELADO', 'ESTORNADO']:
+                        print(f"   ⚠️  Atenção: Pedido {pedido_id} cancelado - verificar necessidade de estorno")
+                        
+            except Exception as e:
+                print(f"❌ Erro ao processar evento: {e}")
+
+# INICIAR LISTENER EM THREAD SEPARADA
+threading.Thread(target=escutar_eventos_pedidos, daemon=True).start()
 
 # Simulação de gateway de pagamento externo
 class PagarmeClient:
@@ -49,24 +94,15 @@ class PagarmeClient:
 pagarme_client = PagarmeClient(api_key=os.getenv("PAGARME_API_KEY", "ak_test_123456"))
 
 async def processar_pagamento_externo(pagamento: schemas.PagamentoCreate):
-    """Processa pagamento com gateway externo"""
-    pagamento_data = {
-        "amount": int(pagamento.valor * 100),  # Em centavos
-        "payment_method": pagamento.metodo_pagamento,
-        "customer": {
-            "external_id": str(pagamento.cliente_id)
-        },
-        "metadata": {
-            "pedido_id": str(pagamento.pedido_id)
-        }
+    """SEMPRE simula pagamento aprovado - sem API real"""
+    # Simulação sempre bem-sucedida para demonstração
+    transacao_id = f"trans_{uuid.uuid4().hex[:16]}"
+    
+    return {
+        "status": "paid",  # Sempre aprovado
+        "id": transacao_id,
+        "authorization_code": f"auth_{uuid.uuid4().hex[:8]}"
     }
-    
-    # Adicionar dados específicos do método de pagamento
-    if pagamento.metodo_pagamento == "credit_card" and pagamento.dados_pagamento:
-        pagamento_data["card_hash"] = pagamento.dados_pagamento.get("card_hash")
-    
-    resultado = pagarme_client.processar_pagamento(pagamento_data)
-    return resultado
 
 async def publicar_evento_pagamento(pagamento_id: uuid.UUID, pedido_id: uuid.UUID, status: str):
     evento = {
@@ -109,7 +145,8 @@ async def processar_pagamento_em_background(pagamento_id: uuid.UUID):
             pedido_id=db_pagamento.pedido_id,
             cliente_id=db_pagamento.cliente_id,
             valor=db_pagamento.valor,
-            metodo_pagamento=db_pagamento.metodo_pagamento
+            metodo_pagamento=db_pagamento.metodo_pagamento,
+            dados_pagamento=db_pagamento.dados_pagamento  # Já está desserializado
         )
         
         resultado = await processar_pagamento_externo(pagamento_create)
@@ -123,7 +160,7 @@ async def processar_pagamento_em_background(pagamento_id: uuid.UUID):
             transacao_id=resultado["id"]
         )
         
-        crud.update_pagamento(db, pagamento_id=pagamento_id, pagamento_update=pagamento_update)
+        db_pagamento_atualizado = crud.update_pagamento(db, pagamento_id=pagamento_id, pagamento_update=pagamento_update)
         
         # Publicar evento
         await publicar_evento_pagamento(pagamento_id, db_pagamento.pedido_id, novo_status)

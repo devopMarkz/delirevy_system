@@ -3,6 +3,12 @@ from sqlalchemy.orm import Session
 import crud, schemas, models
 from database import SessionLocal, engine, get_db
 import uuid
+import redis
+import json
+import threading
+import os
+from sendgrid import SendGridAPIClient
+from sendgrid.helpers.mail import Mail
 from typing import List
 
 # Criar tabelas
@@ -13,6 +19,212 @@ app = FastAPI(
     description="Microsserviço para gerenciamento de restaurantes e produtos",
     version="1.0.0"
 )
+
+# Redis
+redis_client = redis.Redis(host='redis', port=6379, decode_responses=True)
+
+# Configurações do SendGrid
+SENDGRID_API_KEY = os.getenv('SENDGRID_API_KEY', 'xxx')
+EMAIL_REMETENTE = os.getenv('EMAIL_USERNAME', 'marcosacs.2022@gmail.com')
+
+# Função para enviar email
+def enviar_email_restaurante(destinatario: str, assunto: str, corpo_html: str):
+    """Envia email usando SendGrid"""
+    try:
+        message = Mail(
+            from_email=EMAIL_REMETENTE,
+            to_emails=destinatario,
+            subject=assunto,
+            html_content=corpo_html
+        )
+        
+        sg = SendGridAPIClient(SENDGRID_API_KEY)
+        response = sg.send(message)
+        
+        print(f"📧 Email enviado para {destinatario} - Status: {response.status_code}")
+        return True
+        
+    except Exception as e:
+        print(f"❌ Erro ao enviar email: {e}")
+        return False
+
+# Função para obter email do restaurante DO BANCO DE DADOS
+def obter_email_restaurante(restaurante_id: str) -> str:
+    """Obtém o email do restaurante do banco de dados"""
+    db = SessionLocal()
+    try:
+        restaurante = db.query(models.Restaurante).filter(models.Restaurante.id == uuid.UUID(restaurante_id)).first()
+        if restaurante and restaurante.email:
+            return restaurante.email
+        else:
+            print(f"⚠️  Restaurante {restaurante_id} não encontrado ou sem email cadastrado")
+            return "marcosacs.2022@gmail.com"  # Fallback
+    except Exception as e:
+        print(f"❌ Erro ao buscar restaurante no banco: {e}")
+        return "marcosacs.2022@gmail.com"  # Fallback
+    finally:
+        db.close()
+
+# Função para obter nome do restaurante DO BANCO DE DADOS
+def obter_nome_restaurante(restaurante_id: str) -> str:
+    """Obtém o nome do restaurante do banco de dados"""
+    db = SessionLocal()
+    try:
+        restaurante = db.query(models.Restaurante).filter(models.Restaurante.id == uuid.UUID(restaurante_id)).first()
+        if restaurante:
+            return restaurante.nome
+        else:
+            return "Restaurante"
+    except Exception as e:
+        print(f"❌ Erro ao buscar nome do restaurante: {e}")
+        return "Restaurante"
+    finally:
+        db.close()
+
+# LISTENER ASSÍNCRONO PARA EVENTOS DE PEDIDOS
+def escutar_eventos_pedidos():
+    """Escuta eventos de pedidos para notificar restaurantes"""
+    pubsub = redis_client.pubsub()
+    pubsub.subscribe('pedidos')
+    
+    print("🎧 Restaurantes Service: Iniciando listener de eventos de pedidos...")
+    
+    for message in pubsub.listen():
+        if message['type'] == 'message':
+            try:
+                evento = json.loads(message['data'])
+                
+                if evento.get('tipo') == 'PEDIDO_CRIADO':
+                    restaurante_id = evento['restaurante_id']
+                    pedido_id = evento['pedido_id']
+                    total = evento['total']
+                    cliente_id = evento['cliente_id']
+                    
+                    # BUSCAR INFORMAÇÕES DO RESTAURANTE NO BANCO
+                    email_restaurante = obter_email_restaurante(restaurante_id)
+                    nome_restaurante = obter_nome_restaurante(restaurante_id)
+                    
+                    print(f"🏪 🆕 NOVO PEDIDO RECEBIDO!")
+                    print(f"   📋 Pedido ID: {pedido_id}")
+                    print(f"   🏠 Restaurante: {nome_restaurante} ({restaurante_id})")
+                    print(f"   📧 Email: {email_restaurante}")
+                    print(f"   👤 Cliente: {cliente_id}")
+                    print(f"   💰 Valor Total: R$ {total:.2f}")
+                    
+                    # ENVIAR EMAIL PARA O RESTAURANTE
+                    assunto = f"🍕 Novo Pedido Recebido - #{pedido_id[:8]}"
+                    corpo_html = f"""
+                    <!DOCTYPE html>
+                    <html>
+                    <head>
+                        <style>
+                            body {{ font-family: Arial, sans-serif; }}
+                            .container {{ max-width: 600px; margin: 0 auto; padding: 20px; }}
+                            .header {{ background: #ff6b35; color: white; padding: 20px; text-align: center; }}
+                            .content {{ padding: 20px; background: #f9f9f9; }}
+                            .footer {{ text-align: center; padding: 20px; color: #666; }}
+                            .pedido-info {{ background: white; padding: 15px; margin: 10px 0; border-radius: 5px; }}
+                            .restaurante-nome {{ font-size: 18px; font-weight: bold; color: #ff6b35; }}
+                        </style>
+                    </head>
+                    <body>
+                        <div class="container">
+                            <div class="header">
+                                <h1>🍕 Novo Pedido Recebido!</h1>
+                                <p class="restaurante-nome">{nome_restaurante}</p>
+                            </div>
+                            <div class="content">
+                                <h2>Detalhes do Pedido</h2>
+                                <div class="pedido-info">
+                                    <p><strong>Número do Pedido:</strong> {pedido_id}</p>
+                                    <p><strong>Restaurante:</strong> {nome_restaurante}</p>
+                                    <p><strong>Cliente ID:</strong> {cliente_id}</p>
+                                    <p><strong>Valor Total:</strong> R$ {total:.2f}</p>
+                                    <p><strong>Status:</strong> Aguardando confirmação</p>
+                                    <p><strong>Data/Hora:</strong> {json.loads(message['data']).get('timestamp', 'Agora')}</p>
+                                </div>
+                                <p><strong>⚠️ ATENÇÃO:</strong> Prepare o pedido o mais rápido possível!</p>
+                                <p>Acesse o sistema para mais detalhes e para confirmar o pedido.</p>
+                            </div>
+                            <div class="footer">
+                                <p>Delivery System - Seu sistema de delivery profissional</p>
+                                <p>Este é um email automático, não responda.</p>
+                            </div>
+                        </div>
+                    </body>
+                    </html>
+                    """
+                    
+                    # Enviar email
+                    email_enviado = enviar_email_restaurante(email_restaurante, assunto, corpo_html)
+                    
+                    if email_enviado:
+                        print(f"   📧 Email de notificação enviado para: {email_restaurante}")
+                        print(f"   🔔 Notificação enviada para o restaurante {nome_restaurante}!")
+                    else:
+                        print(f"   ⚠️  Falha ao enviar email para: {email_restaurante}")
+                    
+                elif evento.get('tipo') == 'PEDIDO_STATUS_ATUALIZADO':
+                    pedido_id = evento['pedido_id']
+                    status = evento['status']
+                    restaurante_id = evento.get('restaurante_id')
+                    
+                    print(f"🔄 ATUALIZAÇÃO DE PEDIDO: {pedido_id}")
+                    print(f"   📊 Novo Status: {status}")
+                    
+                    # Enviar email para atualizações importantes
+                    if status == 'CONFIRMADO' and restaurante_id:
+                        print(f"   ✅ Pedido confirmado - preparar para produção!")
+                        
+                        # BUSCAR INFORMAÇÕES DO RESTAURANTE NO BANCO
+                        email_restaurante = obter_email_restaurante(restaurante_id)
+                        nome_restaurante = obter_nome_restaurante(restaurante_id)
+                        
+                        # Email de confirmação
+                        assunto = f"✅ Pedido Confirmado - #{pedido_id[:8]}"
+                        corpo_html = f"""
+                        <!DOCTYPE html>
+                        <html>
+                        <body>
+                            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+                                <div style="background: #28a745; color: white; padding: 20px; text-align: center;">
+                                    <h1>✅ Pedido Confirmado!</h1>
+                                    <p style="font-size: 18px; font-weight: bold;">{nome_restaurante}</p>
+                                </div>
+                                <div style="padding: 20px; background: #f9f9f9;">
+                                    <h2>Pedido Pronto para Produção</h2>
+                                    <div style="background: white; padding: 15px; margin: 10px 0; border-radius: 5px;">
+                                        <p><strong>Número do Pedido:</strong> {pedido_id}</p>
+                                        <p><strong>Restaurante:</strong> {nome_restaurante}</p>
+                                        <p><strong>Status:</strong> CONFIRMADO</p>
+                                    </div>
+                                    <p><strong>🚀 INICIAR PREPARO:</strong> O pedido foi confirmado e está pronto para produção.</p>
+                                    <p>Inicie o preparo imediatamente para garantir a satisfação do cliente.</p>
+                                </div>
+                                <div style="text-align: center; padding: 20px; color: #666;">
+                                    <p>Delivery System - Sistema Automático de Notificações</p>
+                                </div>
+                            </div>
+                        </body>
+                        </html>
+                        """
+                        enviar_email_restaurante(email_restaurante, assunto, corpo_html)
+                        print(f"   📧 Email de confirmação enviado para: {nome_restaurante}")
+                        
+                    elif status == 'EM_PREPARO':
+                        print(f"   👨‍🍳 Pedido em preparo - cozinha notificada!")
+                    elif status == 'A_CAMINHO':
+                        print(f"   🛵 Pedido a caminho - aguardar entregador!")
+                    elif status == 'ENTREGUE':
+                        print(f"   🎉 Pedido entregue - finalizado com sucesso!")
+                    elif status in ['CANCELADO', 'ESTORNADO']:
+                        print(f"   ❌ Pedido cancelado - verificar motivo!")
+                        
+            except Exception as e:
+                print(f"❌ Erro ao processar evento: {e}")
+
+# INICIAR LISTENER EM THREAD SEPARADA
+threading.Thread(target=escutar_eventos_pedidos, daemon=True).start()
 
 # RESTAURANTES
 @app.post("/restaurantes/", response_model=schemas.Restaurante)

@@ -14,7 +14,7 @@ class Pagamento(Base):
     metodo_pagamento = Column(String(50), nullable=False)  # cartao, pix, dinheiro
     status = Column(String(50), default="PENDENTE")  # PENDENTE, APROVADO, REPROVADO, ESTORNADO
     transacao_id = Column(String(100))  # ID da transação no gateway
-    dados_pagamento = Column(Text)  # JSON com dados sensíveis (criptografado)
+    dados_pagamento = Column(Text)  # JSON com dados sensíveis (criptografado) - MUDEI PARA Text
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 

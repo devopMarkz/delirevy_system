@@ -169,6 +169,18 @@ async def atualizar_status_pedido(pedido_id: str, status: str):
         raise HTTPException(status_code=500, detail=f"Erro ao atualizar status: {str(e)}")
 
 # ========== PAGAMENTOS ==========
+@app.get("/pagamentos")
+async def listar_pagamentos(skip: int = 0, limit: int = 100):
+    try:
+        response = requests.get(
+            f"{PAGAMENTOS_SERVICE_URL}/pagamentos/",
+            params={"skip": skip, "limit": limit}
+        )
+        response.raise_for_status()
+        return response.json()
+    except requests.RequestException as e:
+        raise HTTPException(status_code=500, detail=f"Erro ao listar pagamentos: {str(e)}")
+
 @app.post("/pagamentos")
 async def criar_pagamento(pagamento_data: dict):
     try:
@@ -177,6 +189,27 @@ async def criar_pagamento(pagamento_data: dict):
         return response.json()
     except requests.RequestException as e:
         raise HTTPException(status_code=500, detail=f"Erro ao criar pagamento: {str(e)}")
+
+@app.get("/pagamentos/{pagamento_id}")
+async def obter_pagamento(pagamento_id: str):
+    try:
+        response = requests.get(f"{PAGAMENTOS_SERVICE_URL}/pagamentos/{pagamento_id}")
+        response.raise_for_status()
+        return response.json()
+    except requests.RequestException as e:
+        raise HTTPException(status_code=500, detail=f"Erro ao obter pagamento: {str(e)}")
+
+@app.put("/pagamentos/{pagamento_id}")
+async def atualizar_pagamento(pagamento_id: str, pagamento_update: dict):
+    try:
+        response = requests.put(
+            f"{PAGAMENTOS_SERVICE_URL}/pagamentos/{pagamento_id}", 
+            json=pagamento_update
+        )
+        response.raise_for_status()
+        return response.json()
+    except requests.RequestException as e:
+        raise HTTPException(status_code=500, detail=f"Erro ao atualizar pagamento: {str(e)}")
 
 @app.get("/pagamentos/pedido/{pedido_id}")
 async def obter_pagamento_por_pedido(pedido_id: str):

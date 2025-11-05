@@ -5,7 +5,8 @@ from database import SessionLocal, engine, get_db
 import redis
 import json
 import uuid
-import requests  # ADICIONE ESTE IMPORT
+import requests
+import threading
 from typing import List
 
 # Criar tabelas
@@ -19,6 +20,81 @@ app = FastAPI(
 
 # Redis
 redis_client = redis.Redis(host='redis', port=6379, decode_responses=True)
+
+# LISTENER ASSÍNCRONO PARA EVENTOS DE PAGAMENTOS
+def escutar_eventos_pagamentos():
+    """Escuta eventos de pagamentos para atualizar pedidos automaticamente"""
+    pubsub = redis_client.pubsub()
+    pubsub.subscribe('pagamentos')
+    
+    print("🎧 Pedidos Service: Iniciando listener de eventos de pagamentos...")
+    
+    for message in pubsub.listen():
+        if message['type'] == 'message':
+            try:
+                evento = json.loads(message['data'])
+                
+                if evento.get('tipo') == 'PAGAMENTO_PROCESSADO':
+                    pedido_id = evento['pedido_id']
+                    status_pagamento = evento['status']
+                    pagamento_id = evento['pagamento_id']
+                    
+                    print(f"💳 EVENTO PAGAMENTO RECEBIDO:")
+                    print(f"   📦 Pedido: {pedido_id}")
+                    print(f"   💰 Pagamento: {pagamento_id}")
+                    print(f"   📊 Status: {status_pagamento}")
+                    
+                    # ATUALIZAR STATUS DO PEDIDO AUTOMATICAMENTE
+                    db = SessionLocal()
+                    try:
+                        if status_pagamento == "APROVADO":
+                            pedido_atualizado = crud.update_pedido_status(db, uuid.UUID(pedido_id), "CONFIRMADO")
+                            if pedido_atualizado:
+                                print(f"   ✅ Pedido {pedido_id} confirmado automaticamente!")
+                                
+                                # Publicar evento de status atualizado
+                                evento_status = {
+                                    "tipo": "PEDIDO_STATUS_ATUALIZADO",
+                                    "pedido_id": pedido_id,
+                                    "status": "CONFIRMADO",
+                                    "restaurante_id": str(pedido_atualizado.restaurante_id),
+                                    "motivo": "Pagamento aprovado automaticamente"
+                                }
+                                redis_client.publish("pedidos", json.dumps(evento_status))
+                                print(f"   📢 Evento de confirmação publicado!")
+                                
+                            else:
+                                print(f"   ❌ Pedido {pedido_id} não encontrado!")
+                                
+                        elif status_pagamento == "REPROVADO":
+                            pedido_atualizado = crud.update_pedido_status(db, uuid.UUID(pedido_id), "CANCELADO")
+                            if pedido_atualizado:
+                                print(f"   ❌ Pedido {pedido_id} cancelado (pagamento reprovado)")
+                                
+                                # Publicar evento de cancelamento
+                                evento_status = {
+                                    "tipo": "PEDIDO_STATUS_ATUALIZADO", 
+                                    "pedido_id": pedido_id,
+                                    "status": "CANCELADO",
+                                    "restaurante_id": str(pedido_atualizado.restaurante_id),
+                                    "motivo": "Pagamento reprovado"
+                                }
+                                redis_client.publish("pedidos", json.dumps(evento_status))
+                                
+                        elif status_pagamento == "FALHA":
+                            print(f"   ⚠️  Falha no processamento do pagamento {pagamento_id}")
+                            # Poderia tentar reprocessar ou notificar admin
+                            
+                    except Exception as e:
+                        print(f"   ❌ Erro ao atualizar pedido: {e}")
+                    finally:
+                        db.close()
+                        
+            except Exception as e:
+                print(f"❌ Erro ao processar evento de pagamento: {e}")
+
+# INICIAR LISTENER EM THREAD SEPARADA
+threading.Thread(target=escutar_eventos_pagamentos, daemon=True).start()
 
 # FUNÇÃO PARA INTEGRAÇÃO COM API EXTERNA VIAcep
 def validar_e_completar_endereco(cep: str) -> dict:
@@ -111,9 +187,12 @@ def criar_pedido(pedido: schemas.PedidoCreate, db: Session = Depends(get_db)):
             "restaurante_id": str(pedido.restaurante_id),
             "total": float(pedido_validado.total),
             "cep": cep,
-            "endereco_validado": True
+            "endereco_validado": True,
+            "timestamp": json.loads(json.dumps(db_pedido.created_at, default=str)) if hasattr(db_pedido, 'created_at') else "Agora"
         }
         redis_client.publish("pedidos", json.dumps(evento))
+        
+        print(f"📦 Pedido {db_pedido.id} criado e evento publicado!")
         
         return db_pedido
         
@@ -170,9 +249,13 @@ def atualizar_status_pedido(pedido_id: uuid.UUID, status: str, db: Session = Dep
     evento = {
         "tipo": "PEDIDO_STATUS_ATUALIZADO",
         "pedido_id": str(pedido_id),
-        "status": status
+        "status": status,
+        "restaurante_id": str(db_pedido.restaurante_id) if db_pedido else None,
+        "motivo": "Atualização manual"
     }
     redis_client.publish("pedidos", json.dumps(evento))
+    
+    print(f"🔄 Status do pedido {pedido_id} atualizado para: {status}")
     
     return {"message": "Status atualizado com sucesso", "pedido_id": str(pedido_id), "status": status}
 

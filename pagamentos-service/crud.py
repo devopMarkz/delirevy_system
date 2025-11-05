@@ -2,23 +2,66 @@ from sqlalchemy.orm import Session
 import models
 import schemas
 import uuid
+import json
 from typing import List, Optional
 
 def create_pagamento(db: Session, pagamento: schemas.PagamentoCreate):
-    db_pagamento = models.Pagamento(**pagamento.dict())
+    # CONVERTE dict PARA JSON STRING ANTES DE SALVAR
+    dados_pagamento_json = None
+    if pagamento.dados_pagamento:
+        dados_pagamento_json = json.dumps(pagamento.dados_pagamento)
+    
+    db_pagamento = models.Pagamento(
+        pedido_id=pagamento.pedido_id,
+        cliente_id=pagamento.cliente_id,
+        valor=pagamento.valor,
+        metodo_pagamento=pagamento.metodo_pagamento,
+        dados_pagamento=dados_pagamento_json,
+        status="PENDENTE"
+    )
     db.add(db_pagamento)
     db.commit()
     db.refresh(db_pagamento)
+    
+    # DESSERIALIZA PARA RETORNAR O OBJETO CORRETO
+    if db_pagamento.dados_pagamento:
+        try:
+            db_pagamento.dados_pagamento = json.loads(db_pagamento.dados_pagamento)
+        except:
+            db_pagamento.dados_pagamento = None
+    
     return db_pagamento
 
 def get_pagamento(db: Session, pagamento_id: uuid.UUID):
-    return db.query(models.Pagamento).filter(models.Pagamento.id == pagamento_id).first()
+    pagamento = db.query(models.Pagamento).filter(models.Pagamento.id == pagamento_id).first()
+    if pagamento and pagamento.dados_pagamento:
+        # CONVERTE JSON STRING DE VOLTA PARA dict
+        try:
+            pagamento.dados_pagamento = json.loads(pagamento.dados_pagamento)
+        except:
+            pagamento.dados_pagamento = None
+    return pagamento
 
 def get_pagamento_by_pedido(db: Session, pedido_id: uuid.UUID):
-    return db.query(models.Pagamento).filter(models.Pagamento.pedido_id == pedido_id).first()
+    pagamento = db.query(models.Pagamento).filter(models.Pagamento.pedido_id == pedido_id).first()
+    if pagamento and pagamento.dados_pagamento:
+        # CONVERTE JSON STRING DE VOLTA PARA dict
+        try:
+            pagamento.dados_pagamento = json.loads(pagamento.dados_pagamento)
+        except:
+            pagamento.dados_pagamento = None
+    return pagamento
 
 def get_pagamentos(db: Session, skip: int = 0, limit: int = 100):
-    return db.query(models.Pagamento).offset(skip).limit(limit).all()
+    pagamentos = db.query(models.Pagamento).offset(skip).limit(limit).all()
+    # CONVERTE JSON STRING DE VOLTA PARA dict EM TODOS OS PAGAMENTOS
+    for pagamento in pagamentos:
+        if pagamento.dados_pagamento:
+            try:
+                pagamento.dados_pagamento = json.loads(pagamento.dados_pagamento)
+            except:
+                pagamento.dados_pagamento = None
+    return pagamentos
 
 def update_pagamento(db: Session, pagamento_id: uuid.UUID, pagamento_update: schemas.PagamentoUpdate):
     db_pagamento = db.query(models.Pagamento).filter(models.Pagamento.id == pagamento_id).first()
@@ -28,6 +71,14 @@ def update_pagamento(db: Session, pagamento_id: uuid.UUID, pagamento_update: sch
             setattr(db_pagamento, field, value)
         db.commit()
         db.refresh(db_pagamento)
+        
+        # DESSERIALIZA APÓS ATUALIZAR
+        if db_pagamento.dados_pagamento:
+            try:
+                db_pagamento.dados_pagamento = json.loads(db_pagamento.dados_pagamento)
+            except:
+                db_pagamento.dados_pagamento = None
+                
     return db_pagamento
 
 def delete_pagamento(db: Session, pagamento_id: uuid.UUID):
