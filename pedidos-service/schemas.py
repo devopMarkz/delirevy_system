@@ -1,7 +1,8 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, validator
 from typing import List, Optional, Dict, Any
 from datetime import datetime
 import uuid
+import re  # ADICIONE ESTE IMPORT
 
 class ItemPedidoBase(BaseModel):
     produto_id: uuid.UUID
@@ -27,6 +28,23 @@ class EnderecoEntrega(BaseModel):
     cidade: str
     estado: str
     cep: str
+
+    @validator('cep')
+    def validar_formato_cep(cls, v):
+        # Remove caracteres não numéricos
+        cep_limpo = ''.join(filter(str.isdigit, v))
+        
+        if len(cep_limpo) != 8:
+            raise ValueError('CEP deve conter 8 dígitos')
+        
+        # Formata o CEP (XXXXX-XXX)
+        return f"{cep_limpo[:5]}-{cep_limpo[5:]}"
+
+    @validator('estado')
+    def validar_estado(cls, v):
+        if len(v) != 2:
+            raise ValueError('Estado deve ser a sigla de 2 letras')
+        return v.upper()
 
 class PedidoBase(BaseModel):
     cliente_id: uuid.UUID

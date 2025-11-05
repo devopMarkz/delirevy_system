@@ -2,6 +2,7 @@ from sqlalchemy import Column, String, Float, DateTime, JSON, Text, ForeignKey
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.sql import func
 import uuid
+import json  # ADICIONE ESTE IMPORT
 from database import Base
 
 class Pedido(Base):
@@ -16,6 +17,20 @@ class Pedido(Base):
     endereco_entrega = Column(JSON, nullable=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+
+    # ADICIONE ESTE MÉTODO PARA SERIALIZAR UUIDs
+    def to_dict(self):
+        return {
+            'id': str(self.id),
+            'cliente_id': str(self.cliente_id),
+            'restaurante_id': str(self.restaurante_id),
+            'itens': self.itens,
+            'status': self.status,
+            'total': self.total,
+            'endereco_entrega': self.endereco_entrega,
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+            'updated_at': self.updated_at.isoformat() if self.updated_at else None
+        }
 
 class ItemPedido(Base):
     __tablename__ = "itens_pedido"

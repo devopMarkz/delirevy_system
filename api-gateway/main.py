@@ -52,9 +52,26 @@ async def listar_restaurantes(skip: int = 0, limit: int = 100, ativo: bool = Tru
 @app.post("/restaurantes")
 async def criar_restaurante(restaurante_data: dict):
     try:
-        response = requests.post(f"{RESTAURANTES_SERVICE_URL}/restaurantes/", json=restaurante_data)
+        print(f"🔧 DEBUG: Enviando para restaurantes-service: {restaurante_data}")
+        
+        # Remove campos None/nulos para evitar problemas
+        restaurante_clean = {k: v for k, v in restaurante_data.items() if v is not None}
+        
+        response = requests.post(
+            f"{RESTAURANTES_SERVICE_URL}/restaurantes/", 
+            json=restaurante_clean,
+            timeout=30
+        )
+        
+        print(f"🔧 DEBUG: Resposta do restaurantes-service: {response.status_code} - {response.text}")
+        
         response.raise_for_status()
         return response.json()
+        
+    except requests.exceptions.Timeout:
+        raise HTTPException(status_code=504, detail="Timeout ao criar restaurante")
+    except requests.exceptions.ConnectionError:
+        raise HTTPException(status_code=503, detail="Serviço de restaurantes indisponível")
     except requests.RequestException as e:
         raise HTTPException(status_code=500, detail=f"Erro ao criar restaurante: {str(e)}")
 
@@ -78,6 +95,38 @@ async def listar_produtos_restaurante(restaurante_id: str, skip: int = 0, limit:
         return response.json()
     except requests.RequestException as e:
         raise HTTPException(status_code=500, detail=f"Erro ao listar produtos: {str(e)}")
+
+# ========== CATEGORIAS ==========
+@app.post("/categorias")
+async def criar_categoria(categoria_data: dict):
+    try:
+        response = requests.post(f"{RESTAURANTES_SERVICE_URL}/categorias/", json=categoria_data)
+        response.raise_for_status()
+        return response.json()
+    except requests.RequestException as e:
+        raise HTTPException(status_code=500, detail=f"Erro ao criar categoria: {str(e)}")
+
+@app.get("/categorias")
+async def listar_categorias(skip: int = 0, limit: int = 100):
+    try:
+        response = requests.get(
+            f"{RESTAURANTES_SERVICE_URL}/categorias/",
+            params={"skip": skip, "limit": limit}
+        )
+        response.raise_for_status()
+        return response.json()
+    except requests.RequestException as e:
+        raise HTTPException(status_code=500, detail=f"Erro ao listar categorias: {str(e)}")
+
+# ========== PRODUTOS ==========
+@app.post("/produtos")
+async def criar_produto(produto_data: dict):
+    try:
+        response = requests.post(f"{RESTAURANTES_SERVICE_URL}/produtos/", json=produto_data)
+        response.raise_for_status()
+        return response.json()
+    except requests.RequestException as e:
+        raise HTTPException(status_code=500, detail=f"Erro ao criar produto: {str(e)}")
 
 # ========== PEDIDOS ==========
 @app.post("/pedidos")
