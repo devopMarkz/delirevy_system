@@ -1,4 +1,4 @@
-from fastapi import FastAPI, Depends, HTTPException, status, BackgroundTasks
+from fastapi import FastAPI, Depends, HTTPException, BackgroundTasks
 from sqlalchemy.orm import Session
 import crud, schemas, models
 from database import SessionLocal, engine, get_db
@@ -7,7 +7,7 @@ import json
 import uuid
 import requests
 import os
-import threading  # ADICIONE ESTE IMPORT
+import threading
 from typing import List
 
 # Criar tabelas
@@ -72,7 +72,7 @@ class PagarmeClient:
         self.api_key = api_key
         self.base_url = "https://api.pagar.me/1"
 
-    def processar_pagamento(self, pagamento_data: dict):
+    def processar_pagamento(self, pagamento_data: dict ):
         # Simulação - em produção, faria HTTP request real
         import random
         transacao_id = f"trans_{uuid.uuid4().hex[:16]}"
@@ -93,7 +93,7 @@ class PagarmeClient:
 
 pagarme_client = PagarmeClient(api_key=os.getenv("PAGARME_API_KEY", "ak_test_123456"))
 
-async def processar_pagamento_externo(pagamento: schemas.PagamentoCreate):
+def processar_pagamento_externo(pagamento: schemas.PagamentoCreate):
     """SEMPRE simula pagamento aprovado - sem API real"""
     # Simulação sempre bem-sucedida para demonstração
     transacao_id = f"trans_{uuid.uuid4().hex[:16]}"
@@ -104,7 +104,7 @@ async def processar_pagamento_externo(pagamento: schemas.PagamentoCreate):
         "authorization_code": f"auth_{uuid.uuid4().hex[:8]}"
     }
 
-async def publicar_evento_pagamento(pagamento_id: uuid.UUID, pedido_id: uuid.UUID, status: str):
+def publicar_evento_pagamento(pagamento_id: uuid.UUID, pedido_id: uuid.UUID, status: str):
     evento = {
         "tipo": "PAGAMENTO_PROCESSADO",
         "pagamento_id": str(pagamento_id),
@@ -132,44 +132,48 @@ async def criar_pagamento(
     
     return db_pagamento
 
-async def processar_pagamento_em_background(pagamento_id: uuid.UUID):
-    """Processa pagamento de forma assíncrona"""
+def processar_pagamento_em_background(pagamento_id: uuid.UUID):
+    """Processa pagamento de forma assíncrona - SEMPRE APROVADO"""
     db = SessionLocal()
     try:
-        db_pagamento = crud.get_pagamento(db, pagamento_id=pagamento_id)
+        # CORREÇÃO: Passar desserializar_dados=False para garantir que
+        # db_pagamento.dados_pagamento seja uma string JSON (str)
+        # e não um dicionário Python (dict).
+        db_pagamento = crud.get_pagamento(db, pagamento_id=pagamento_id, desserializar_dados=False)
         if not db_pagamento:
+            print(f"❌ Pagamento {pagamento_id} não encontrado")
             return
         
-        # Processar com gateway externo
-        pagamento_create = schemas.PagamentoCreate(
-            pedido_id=db_pagamento.pedido_id,
-            cliente_id=db_pagamento.cliente_id,
-            valor=db_pagamento.valor,
-            metodo_pagamento=db_pagamento.metodo_pagamento,
-            dados_pagamento=db_pagamento.dados_pagamento  # Já está desserializado
-        )
+        print(f"🔄 Processando pagamento {pagamento_id} em background...")
         
-        resultado = await processar_pagamento_externo(pagamento_create)
-        
-        # Atualizar status do pagamento
-        status_map = {"paid": "APROVADO", "refused": "REPROVADO"}
-        novo_status = status_map.get(resultado["status"], "REPROVADO")
+        # 🔥 SIMULAÇÃO SEMPRE APROVADA
+        transacao_id = f"trans_{uuid.uuid4().hex[:16]}"
+        novo_status = "APROVADO"
         
         pagamento_update = schemas.PagamentoUpdate(
             status=novo_status,
-            transacao_id=resultado["id"]
+            transacao_id=transacao_id
         )
         
         db_pagamento_atualizado = crud.update_pagamento(db, pagamento_id=pagamento_id, pagamento_update=pagamento_update)
         
         # Publicar evento
-        await publicar_evento_pagamento(pagamento_id, db_pagamento.pedido_id, novo_status)
+        # A publicação do evento está correta aqui, pois usa db_pagamento.pedido_id
+        # e o novo_status, que são dados simples.
+        publicar_evento_pagamento(pagamento_id, db_pagamento.pedido_id, novo_status)
+        
+        print(f"✅ Pagamento {pagamento_id} APROVADO - Transação: {transacao_id}")
         
     except Exception as e:
-        print(f"Erro ao processar pagamento: {e}")
-        # Atualizar status para falha
-        pagamento_update = schemas.PagamentoUpdate(status="FALHA")
-        crud.update_pagamento(db, pagamento_id=pagamento_id, pagamento_update=pagamento_update)
+        print(f"❌ Erro ao processar pagamento: {e}")
+        try:
+            # Tentar marcar como falha
+            # CORREÇÃO: Garantir que dados_pagamento não seja passado, evitando o erro de tipo
+            pagamento_update = schemas.PagamentoUpdate(status="FALHA", transacao_id=None) 
+            crud.update_pagamento(db, pagamento_id=pagamento_id, pagamento_update=pagamento_update)
+        except Exception as e_fail:
+            db.rollback()
+            print(f"❌ Erro ao marcar como FALHA: {e_fail}")
     finally:
         db.close()
 

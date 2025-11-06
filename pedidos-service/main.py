@@ -7,94 +7,134 @@ import json
 import uuid
 import requests
 import threading
+import time
 from typing import List
+from contextlib import asynccontextmanager  # ADICIONE ESTE IMPORT
 
-# Criar tabelas
-models.Base.metadata.create_all(bind=engine)
+# 🔥 LIFESPAN MODERNO (substitui o on_event deprecated)
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Startup
+    print("🚀 Pedidos Service: Iniciando servidor...")
+    
+    # Iniciar o listener do Redis
+    listener_stop_event.clear()
+    listener_thread = threading.Thread(target=escutar_eventos_pagamentos)
+    listener_thread.daemon = True
+    listener_thread.start()
+    print("✅ Listener de eventos de pagamentos iniciado automaticamente!")
+    
+    yield  # Aqui o app está rodando
+    
+    # Shutdown
+    print("🛑 Pedidos Service: Parando servidor...")
+    listener_stop_event.set()
+    
+    if listener_thread and listener_thread.is_alive():
+        listener_thread.join(timeout=5)
+        print("✅ Listener de eventos de pagamentos parado corretamente.")
 
+# Criar app com lifespan
 app = FastAPI(
     title="Pedidos Service",
     description="Microsserviço para gerenciamento de pedidos",
-    version="1.0.0"
+    version="1.0.0",
+    lifespan=lifespan  # 🔥 USA O LIFESPAN MODERNO
 )
 
 # Redis
 redis_client = redis.Redis(host='redis', port=6379, decode_responses=True)
 
-# LISTENER ASSÍNCRONO PARA EVENTOS DE PAGAMENTOS
+# 🔥 VARIÁVEIS GLOBAIS PARA CONTROLE DO LISTENER
+listener_thread = None
+listener_stop_event = threading.Event()
+
 def escutar_eventos_pagamentos():
     """Escuta eventos de pagamentos para atualizar pedidos automaticamente"""
-    pubsub = redis_client.pubsub()
-    pubsub.subscribe('pagamentos')
-    
     print("🎧 Pedidos Service: Iniciando listener de eventos de pagamentos...")
     
-    for message in pubsub.listen():
-        if message['type'] == 'message':
-            try:
-                evento = json.loads(message['data'])
+    while not listener_stop_event.is_set():
+        try:
+            pubsub = redis_client.pubsub()
+            pubsub.subscribe('pagamentos')
+            
+            print("✅ Inscrito no canal 'pagamentos'. Aguardando eventos...")
+            
+            # 🔥 CORREÇÃO: listen() sem timeout, usa get_message() com polling
+            while not listener_stop_event.is_set():
+                message = pubsub.get_message(timeout=1.0, ignore_subscribe_messages=True)
                 
-                if evento.get('tipo') == 'PAGAMENTO_PROCESSADO':
-                    pedido_id = evento['pedido_id']
-                    status_pagamento = evento['status']
-                    pagamento_id = evento['pagamento_id']
-                    
-                    print(f"💳 EVENTO PAGAMENTO RECEBIDO:")
-                    print(f"   📦 Pedido: {pedido_id}")
-                    print(f"   💰 Pagamento: {pagamento_id}")
-                    print(f"   📊 Status: {status_pagamento}")
-                    
-                    # ATUALIZAR STATUS DO PEDIDO AUTOMATICAMENTE
-                    db = SessionLocal()
+                if message:
                     try:
-                        if status_pagamento == "APROVADO":
-                            pedido_atualizado = crud.update_pedido_status(db, uuid.UUID(pedido_id), "CONFIRMADO")
-                            if pedido_atualizado:
-                                print(f"   ✅ Pedido {pedido_id} confirmado automaticamente!")
-                                
-                                # Publicar evento de status atualizado
-                                evento_status = {
-                                    "tipo": "PEDIDO_STATUS_ATUALIZADO",
-                                    "pedido_id": pedido_id,
-                                    "status": "CONFIRMADO",
-                                    "restaurante_id": str(pedido_atualizado.restaurante_id),
-                                    "motivo": "Pagamento aprovado automaticamente"
-                                }
-                                redis_client.publish("pedidos", json.dumps(evento_status))
-                                print(f"   📢 Evento de confirmação publicado!")
-                                
-                            else:
-                                print(f"   ❌ Pedido {pedido_id} não encontrado!")
-                                
-                        elif status_pagamento == "REPROVADO":
-                            pedido_atualizado = crud.update_pedido_status(db, uuid.UUID(pedido_id), "CANCELADO")
-                            if pedido_atualizado:
-                                print(f"   ❌ Pedido {pedido_id} cancelado (pagamento reprovado)")
-                                
-                                # Publicar evento de cancelamento
-                                evento_status = {
-                                    "tipo": "PEDIDO_STATUS_ATUALIZADO", 
-                                    "pedido_id": pedido_id,
-                                    "status": "CANCELADO",
-                                    "restaurante_id": str(pedido_atualizado.restaurante_id),
-                                    "motivo": "Pagamento reprovado"
-                                }
-                                redis_client.publish("pedidos", json.dumps(evento_status))
-                                
-                        elif status_pagamento == "FALHA":
-                            print(f"   ⚠️  Falha no processamento do pagamento {pagamento_id}")
-                            # Poderia tentar reprocessar ou notificar admin
-                            
-                    except Exception as e:
-                        print(f"   ❌ Erro ao atualizar pedido: {e}")
-                    finally:
-                        db.close()
+                        evento = json.loads(message['data'])
                         
-            except Exception as e:
-                print(f"❌ Erro ao processar evento de pagamento: {e}")
-
-# INICIAR LISTENER EM THREAD SEPARADA
-threading.Thread(target=escutar_eventos_pagamentos, daemon=True).start()
+                        if evento.get('tipo') == 'PAGAMENTO_PROCESSADO':
+                            pedido_id = evento['pedido_id']
+                            status_pagamento = evento['status']
+                            pagamento_id = evento['pagamento_id']
+                            
+                            print(f"💳 EVENTO PAGAMENTO RECEBIDO:")
+                            print(f"   📦 Pedido: {pedido_id}")
+                            print(f"   💰 Pagamento: {pagamento_id}")
+                            print(f"   📊 Status: {status_pagamento}")
+                            
+                            # ATUALIZAR STATUS DO PEDIDO AUTOMATICAMENTE
+                            db = SessionLocal()
+                            try:
+                                if status_pagamento == "APROVADO":
+                                    pedido_atualizado = crud.update_pedido_status(db, uuid.UUID(pedido_id), "CONFIRMADO")
+                                    if pedido_atualizado:
+                                        print(f"   ✅ Pedido {pedido_id} confirmado automaticamente!")
+                                        
+                                        # Publicar evento de status atualizado
+                                        evento_status = {
+                                            "tipo": "PEDIDO_STATUS_ATUALIZADO",
+                                            "pedido_id": pedido_id,
+                                            "status": "CONFIRMADO",
+                                            "restaurante_id": str(pedido_atualizado.restaurante_id),
+                                            "motivo": "Pagamento aprovado automaticamente"
+                                        }
+                                        redis_client.publish("pedidos", json.dumps(evento_status))
+                                        print(f"   📢 Evento de confirmação publicado!")
+                                        
+                                    else:
+                                        print(f"   ❌ Pedido {pedido_id} não encontrado!")
+                                        
+                                elif status_pagamento == "REPROVADO":
+                                    pedido_atualizado = crud.update_pedido_status(db, uuid.UUID(pedido_id), "CANCELADO")
+                                    if pedido_atualizado:
+                                        print(f"   ❌ Pedido {pedido_id} cancelado (pagamento reprovado)")
+                                        
+                                        # Publicar evento de cancelamento
+                                        evento_status = {
+                                            "tipo": "PEDIDO_STATUS_ATUALIZADO", 
+                                            "pedido_id": pedido_id,
+                                            "status": "CANCELADO",
+                                            "restaurante_id": str(pedido_atualizado.restaurante_id),
+                                            "motivo": "Pagamento reprovado"
+                                        }
+                                        redis_client.publish("pedidos", json.dumps(evento_status))
+                                        
+                                elif status_pagamento == "FALHA":
+                                    print(f"   ⚠️  Falha no processamento do pagamento {pagamento_id}")
+                                    
+                            except Exception as e:
+                                print(f"   ❌ Erro ao atualizar pedido: {e}")
+                            finally:
+                                db.close()
+                                
+                    except Exception as e:
+                        print(f"❌ Erro ao processar evento de pagamento: {e}")
+                
+                # Pequena pausa para não sobrecarregar a CPU
+                time.sleep(0.1)
+                        
+        except Exception as e:
+            if not listener_stop_event.is_set():
+                print(f"❌ Erro no listener, reconectando...: {e}")
+                time.sleep(2)  # Espera antes de reconectar
+    
+    print("🛑 Listener de eventos de pagamentos parado.")
 
 # FUNÇÃO PARA INTEGRAÇÃO COM API EXTERNA VIAcep
 def validar_e_completar_endereco(cep: str) -> dict:
