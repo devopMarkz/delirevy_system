@@ -1,4 +1,4 @@
-from fastapi import FastAPI, Depends, HTTPException, status
+from fastapi import FastAPI, Depends, HTTPException, status, Query
 from sqlalchemy.orm import Session
 import crud, schemas, models
 from database import SessionLocal, engine, get_db
@@ -16,8 +16,14 @@ models.Base.metadata.create_all(bind=engine)
 
 app = FastAPI(
     title="Restaurantes Service",
-    description="Microsserviço para gerenciamento de restaurantes e produtos",
-    version="1.0.0"
+    description="Microsserviço para gerenciamento de restaurantes, categorias e produtos. Responsável por notificar restaurantes sobre novos pedidos via e-mail.",
+    version="1.0.0",
+    openapi_tags=[
+        {"name": "Restaurantes", "description": "Endpoints para gerenciar restaurantes."},
+        {"name": "Categorias", "description": "Endpoints para gerenciar categorias de produtos."},
+        {"name": "Produtos", "description": "Endpoints para gerenciar produtos de restaurantes."},
+        {"name": "Interno", "description": "Endpoints internos ou de saúde do serviço."}
+    ]
 )
 
 # Redis
@@ -226,76 +232,170 @@ def escutar_eventos_pedidos():
 # INICIAR LISTENER EM THREAD SEPARADA
 threading.Thread(target=escutar_eventos_pedidos, daemon=True).start()
 
+@app.get("/", summary="Status do Serviço", tags=["Interno"])
+def root():
+    """Retorna o status do serviço de restaurantes."""
+    return {"message": "Restaurantes Service está online"}
+
 # RESTAURANTES
-@app.post("/restaurantes/", response_model=schemas.Restaurante)
+@app.post(
+    "/restaurantes/", 
+    response_model=schemas.Restaurante, 
+    summary="Criar Restaurante", 
+    tags=["Restaurantes"],
+    status_code=status.HTTP_201_CREATED
+)
 def criar_restaurante(restaurante: schemas.RestauranteCreate, db: Session = Depends(get_db)):
+    """Cria um novo restaurante no banco de dados. Requer um CNPJ único."""
     db_restaurante = crud.get_restaurante_by_cnpj(db, cnpj=restaurante.cnpj)
     if db_restaurante:
         raise HTTPException(status_code=400, detail="CNPJ já cadastrado")
     return crud.create_restaurante(db=db, restaurante=restaurante)
 
-@app.get("/restaurantes/", response_model=List[schemas.Restaurante])
-def listar_restaurantes(skip: int = 0, limit: int = 100, ativo: bool = True, db: Session = Depends(get_db)):
+@app.get(
+    "/restaurantes/", 
+    response_model=List[schemas.Restaurante], 
+    summary="Listar Restaurantes", 
+    tags=["Restaurantes"]
+)
+def listar_restaurantes(
+    skip: int = Query(0, description="Número de itens a pular (offset)"), 
+    limit: int = Query(100, description="Número máximo de itens a retornar"), 
+    ativo: bool = Query(True, description="Filtrar por restaurantes ativos"), 
+    db: Session = Depends(get_db)
+):
+    """Retorna uma lista de todos os restaurantes cadastrados, com opções de paginação e filtro por status de atividade."""
     restaurantes = crud.get_restaurantes(db, skip=skip, limit=limit, ativo=ativo)
     return restaurantes
 
-@app.get("/restaurantes/{restaurante_id}", response_model=schemas.Restaurante)
+@app.get(
+    "/restaurantes/{restaurante_id}", 
+    response_model=schemas.Restaurante, 
+    summary="Obter Restaurante por ID", 
+    tags=["Restaurantes"]
+)
 def obter_restaurante(restaurante_id: uuid.UUID, db: Session = Depends(get_db)):
+    """Retorna os detalhes de um restaurante específico pelo seu ID."""
     db_restaurante = crud.get_restaurante(db, restaurante_id=restaurante_id)
     if db_restaurante is None:
         raise HTTPException(status_code=404, detail="Restaurante não encontrado")
     return db_restaurante
 
-@app.put("/restaurantes/{restaurante_id}", response_model=schemas.Restaurante)
+@app.put(
+    "/restaurantes/{restaurante_id}", 
+    response_model=schemas.Restaurante, 
+    summary="Atualizar Restaurante", 
+    tags=["Restaurantes"]
+)
 def atualizar_restaurante(restaurante_id: uuid.UUID, restaurante_update: schemas.RestauranteUpdate, db: Session = Depends(get_db)):
+    """Atualiza as informações de um restaurante existente."""
     db_restaurante = crud.update_restaurante(db, restaurante_id=restaurante_id, restaurante_update=restaurante_update)
     if db_restaurante is None:
         raise HTTPException(status_code=404, detail="Restaurante não encontrado")
     return db_restaurante
 
-@app.delete("/restaurantes/{restaurante_id}")
+@app.delete(
+    "/restaurantes/{restaurante_id}", 
+    summary="Deletar Restaurante", 
+    tags=["Restaurantes"],
+    status_code=status.HTTP_204_NO_CONTENT
+)
 def deletar_restaurante(restaurante_id: uuid.UUID, db: Session = Depends(get_db)):
+    """Deleta um restaurante do banco de dados. Esta operação é irreversível."""
     db_restaurante = crud.delete_restaurante(db, restaurante_id=restaurante_id)
     if db_restaurante is None:
         raise HTTPException(status_code=404, detail="Restaurante não encontrado")
     return {"message": "Restaurante deletado com sucesso"}
 
 # CATEGORIAS
-@app.post("/categorias/", response_model=schemas.Categoria)
+@app.post(
+    "/categorias/", 
+    response_model=schemas.Categoria, 
+    summary="Criar Categoria", 
+    tags=["Categorias"],
+    status_code=status.HTTP_201_CREATED
+)
 def criar_categoria(categoria: schemas.CategoriaCreate, db: Session = Depends(get_db)):
+    """Cria uma nova categoria de produtos (ex: Pizzas, Bebidas)."""
     return crud.create_categoria(db=db, categoria=categoria)
 
-@app.get("/categorias/", response_model=List[schemas.Categoria])
-def listar_categorias(skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
+@app.get(
+    "/categorias/", 
+    response_model=List[schemas.Categoria], 
+    summary="Listar Categorias", 
+    tags=["Categorias"]
+)
+def listar_categorias(
+    skip: int = Query(0, description="Número de itens a pular (offset)"), 
+    limit: int = Query(100, description="Número máximo de itens a retornar"), 
+    db: Session = Depends(get_db)
+):
+    """Retorna uma lista de todas as categorias de produtos cadastradas."""
     categorias = crud.get_categorias(db, skip=skip, limit=limit)
     return categorias
 
 # PRODUTOS
-@app.post("/produtos/", response_model=schemas.Produto)
+@app.post(
+    "/produtos/", 
+    response_model=schemas.Produto, 
+    summary="Criar Produto", 
+    tags=["Produtos"],
+    status_code=status.HTTP_201_CREATED
+)
 def criar_produto(produto: schemas.ProdutoCreate, db: Session = Depends(get_db)):
+    """Cria um novo produto associado a um restaurante e categoria."""
     return crud.create_produto(db=db, produto=produto)
 
-@app.get("/produtos/restaurante/{restaurante_id}", response_model=List[schemas.Produto])
-def listar_produtos_restaurante(restaurante_id: uuid.UUID, skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
+@app.get(
+    "/produtos/restaurante/{restaurante_id}", 
+    response_model=List[schemas.Produto], 
+    summary="Listar Produtos por Restaurante", 
+    tags=["Produtos"]
+)
+def listar_produtos_restaurante(
+    restaurante_id: uuid.UUID, 
+    skip: int = Query(0, description="Número de itens a pular (offset)"), 
+    limit: int = Query(100, description="Número máximo de itens a retornar"), 
+    db: Session = Depends(get_db)
+):
+    """Retorna todos os produtos de um restaurante específico."""
     produtos = crud.get_produtos_by_restaurante(db, restaurante_id=restaurante_id, skip=skip, limit=limit)
     return produtos
 
-@app.get("/produtos/{produto_id}", response_model=schemas.Produto)
+@app.get(
+    "/produtos/{produto_id}", 
+    response_model=schemas.Produto, 
+    summary="Obter Produto por ID", 
+    tags=["Produtos"]
+)
 def obter_produto(produto_id: uuid.UUID, db: Session = Depends(get_db)):
+    """Retorna os detalhes de um produto específico pelo seu ID."""
     db_produto = crud.get_produto(db, produto_id=produto_id)
     if db_produto is None:
         raise HTTPException(status_code=404, detail="Produto não encontrado")
     return db_produto
 
-@app.put("/produtos/{produto_id}", response_model=schemas.Produto)
+@app.put(
+    "/produtos/{produto_id}", 
+    response_model=schemas.Produto, 
+    summary="Atualizar Produto", 
+    tags=["Produtos"]
+)
 def atualizar_produto(produto_id: uuid.UUID, produto_update: schemas.ProdutoUpdate, db: Session = Depends(get_db)):
+    """Atualiza as informações de um produto existente."""
     db_produto = crud.update_produto(db, produto_id=produto_id, produto_update=produto_update)
     if db_produto is None:
         raise HTTPException(status_code=404, detail="Produto não encontrado")
     return db_produto
 
-@app.delete("/produtos/{produto_id}")
+@app.delete(
+    "/produtos/{produto_id}", 
+    summary="Deletar Produto", 
+    tags=["Produtos"],
+    status_code=status.HTTP_204_NO_CONTENT
+)
 def deletar_produto(produto_id: uuid.UUID, db: Session = Depends(get_db)):
+    """Deleta um produto do banco de dados. Esta operação é irreversível."""
     db_produto = crud.delete_produto(db, produto_id=produto_id)
     if db_produto is None:
         raise HTTPException(status_code=404, detail="Produto não encontrado")

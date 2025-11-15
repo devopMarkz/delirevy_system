@@ -1,4 +1,4 @@
-from fastapi import FastAPI, Depends, HTTPException, status
+from fastapi import FastAPI, Depends, HTTPException, status, Query
 from sqlalchemy.orm import Session
 import crud, schemas, models
 from database import SessionLocal, engine, get_db
@@ -9,45 +9,28 @@ import requests
 import threading
 import time
 from typing import List
-from contextlib import asynccontextmanager  # ADICIONE ESTE IMPORT
+from contextlib import asynccontextmanager
+from datetime import datetime # Importar datetime para uso no evento
 
-# 🔥 LIFESPAN MODERNO (substitui o on_event deprecated)
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    # Startup
-    print("🚀 Pedidos Service: Iniciando servidor...")
-    
-    # Iniciar o listener do Redis
-    listener_stop_event.clear()
-    listener_thread = threading.Thread(target=escutar_eventos_pagamentos)
-    listener_thread.daemon = True
-    listener_thread.start()
-    print("✅ Listener de eventos de pagamentos iniciado automaticamente!")
-    
-    yield  # Aqui o app está rodando
-    
-    # Shutdown
-    print("🛑 Pedidos Service: Parando servidor...")
-    listener_stop_event.set()
-    
-    if listener_thread and listener_thread.is_alive():
-        listener_thread.join(timeout=5)
-        print("✅ Listener de eventos de pagamentos parado corretamente.")
-
-# Criar app com lifespan
-app = FastAPI(
-    title="Pedidos Service",
-    description="Microsserviço para gerenciamento de pedidos",
-    version="1.0.0",
-    lifespan=lifespan  # 🔥 USA O LIFESPAN MODERNO
-)
-
-# Redis
-redis_client = redis.Redis(host='redis', port=6379, decode_responses=True)
+# Criar tabelas
+models.Base.metadata.create_all(bind=engine)
 
 # 🔥 VARIÁVEIS GLOBAIS PARA CONTROLE DO LISTENER
 listener_thread = None
 listener_stop_event = threading.Event()
+
+# Redis
+redis_client = redis.Redis(host='redis', port=6379, decode_responses=True)
+
+# Função para publicar evento
+def publicar_evento(channel: str, evento: dict):
+    """Publica um evento no canal Redis especificado."""
+    try:
+        evento['timestamp'] = str(datetime.now())
+        redis_client.publish(channel, json.dumps(evento))
+        print(f"📢 Evento publicado no canal '{channel}': {evento.get('tipo')}")
+    except Exception as e:
+        print(f"❌ Erro ao publicar evento no Redis: {e}")
 
 def escutar_eventos_pagamentos():
     """Escuta eventos de pagamentos para atualizar pedidos automaticamente"""
@@ -60,7 +43,6 @@ def escutar_eventos_pagamentos():
             
             print("✅ Inscrito no canal 'pagamentos'. Aguardando eventos...")
             
-            # 🔥 CORREÇÃO: listen() sem timeout, usa get_message() com polling
             while not listener_stop_event.is_set():
                 message = pubsub.get_message(timeout=1.0, ignore_subscribe_messages=True)
                 
@@ -94,7 +76,7 @@ def escutar_eventos_pagamentos():
                                             "restaurante_id": str(pedido_atualizado.restaurante_id),
                                             "motivo": "Pagamento aprovado automaticamente"
                                         }
-                                        redis_client.publish("pedidos", json.dumps(evento_status))
+                                        publicar_evento("pedidos", evento_status)
                                         print(f"   📢 Evento de confirmação publicado!")
                                         
                                     else:
@@ -113,7 +95,7 @@ def escutar_eventos_pagamentos():
                                             "restaurante_id": str(pedido_atualizado.restaurante_id),
                                             "motivo": "Pagamento reprovado"
                                         }
-                                        redis_client.publish("pedidos", json.dumps(evento_status))
+                                        publicar_evento("pedidos", evento_status)
                                         
                                 elif status_pagamento == "FALHA":
                                     print(f"   ⚠️  Falha no processamento do pagamento {pagamento_id}")
@@ -135,6 +117,42 @@ def escutar_eventos_pagamentos():
                 time.sleep(2)  # Espera antes de reconectar
     
     print("🛑 Listener de eventos de pagamentos parado.")
+
+# 🔥 LIFESPAN MODERNO (substitui o on_event deprecated)
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Startup
+    print("🚀 Pedidos Service: Iniciando servidor...")
+    
+    # Iniciar o listener do Redis
+    listener_stop_event.clear()
+    listener_thread = threading.Thread(target=escutar_eventos_pagamentos)
+    listener_thread.daemon = True
+    listener_thread.start()
+    print("✅ Listener de eventos de pagamentos iniciado automaticamente!")
+    
+    yield  # Aqui o app está rodando
+    
+    # Shutdown
+    print("🛑 Pedidos Service: Parando servidor...")
+    listener_stop_event.set()
+    
+    if listener_thread and listener_thread.is_alive():
+        listener_thread.join(timeout=5)
+        print("✅ Listener de eventos de pagamentos parado corretamente.")
+
+# Criar app com lifespan
+app = FastAPI(
+    title="Pedidos Service",
+    description="Microsserviço para gerenciamento de pedidos. Inclui validação de endereço via ViaCEP e comunicação assíncrona via Redis.",
+    version="1.0.0",
+    lifespan=lifespan,
+    openapi_tags=[
+        {"name": "Pedidos", "description": "Endpoints para gerenciar o ciclo de vida dos pedidos."},
+        {"name": "Utilitários", "description": "Endpoints de utilidade, como validação de CEP."},
+        {"name": "Interno", "description": "Endpoints internos ou de saúde do serviço."}
+    ]
+)
 
 # FUNÇÃO PARA INTEGRAÇÃO COM API EXTERNA VIAcep
 def validar_e_completar_endereco(cep: str) -> dict:
@@ -179,8 +197,25 @@ def validar_e_completar_endereco(cep: str) -> dict:
     except Exception as e:
         return {"valido": False, "erro": f"Erro inesperado: {str(e)}"}
 
-@app.post("/pedidos/", response_model=schemas.Pedido)
+@app.get("/", summary="Status do Serviço", tags=["Interno"])
+def root():
+    """Retorna o status do serviço de pedidos."""
+    return {"message": "Pedidos Service está online"}
+
+# PEDIDOS
+@app.post(
+    "/pedidos/", 
+    response_model=schemas.Pedido, 
+    summary="Criar Novo Pedido", 
+    tags=["Pedidos"],
+    status_code=status.HTTP_201_CREATED
+)
 def criar_pedido(pedido: schemas.PedidoCreate, db: Session = Depends(get_db)):
+    """
+    Cria um novo pedido no sistema. 
+    Realiza a validação do endereço de entrega via API externa (ViaCEP).
+    Após a criação, publica o evento 'PEDIDO_CRIADO' no Redis.
+    """
     try:
         # VALIDAÇÃO DO CEP COM API EXTERNA VIAcep
         cep = pedido.endereco_entrega.cep
@@ -193,7 +228,7 @@ def criar_pedido(pedido: schemas.PedidoCreate, db: Session = Depends(get_db)):
             )
         
         # Atualiza o endereço com dados da API ViaCEP (opcional)
-        endereco_atualizado = pedido.endereco_entrega.dict()
+        endereco_atualizado = pedido.endereco_entrega.model_dump()
         dados_api = validacao_cep["dados_endereco"]
         
         # Mantém os dados fornecidos pelo usuário, mas completa com dados da API se estiverem vazios
@@ -228,9 +263,8 @@ def criar_pedido(pedido: schemas.PedidoCreate, db: Session = Depends(get_db)):
             "total": float(pedido_validado.total),
             "cep": cep,
             "endereco_validado": True,
-            "timestamp": json.loads(json.dumps(db_pedido.created_at, default=str)) if hasattr(db_pedido, 'created_at') else "Agora"
         }
-        redis_client.publish("pedidos", json.dumps(evento))
+        publicar_evento("pedidos", evento)
         
         print(f"📦 Pedido {db_pedido.id} criado e evento publicado!")
         
@@ -244,43 +278,81 @@ def criar_pedido(pedido: schemas.PedidoCreate, db: Session = Depends(get_db)):
             detail=f"Erro ao criar pedido: {str(e)}"
         )
 
-# Novo endpoint para testar a validação de CEP
-@app.get("/cep/validar/{cep}")
-def validar_cep(cep: str):
-    """
-    Endpoint para testar a validação de CEP com a API externa ViaCEP
-    """
-    resultado = validar_e_completar_endereco(cep)
-    return {
-        "cep_consultado": cep,
-        "api_externa": "ViaCEP",
-        "resultado": resultado
-    }
-
-@app.get("/pedidos/", response_model=List[schemas.Pedido])
-def listar_pedidos(skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
+@app.get(
+    "/pedidos/", 
+    response_model=List[schemas.Pedido], 
+    summary="Listar Todos os Pedidos", 
+    tags=["Pedidos"]
+)
+def listar_pedidos(
+    skip: int = Query(0, description="Número de itens a pular (offset)"), 
+    limit: int = Query(100, description="Número máximo de itens a retornar"), 
+    db: Session = Depends(get_db)
+):
+    """Retorna uma lista de todos os pedidos cadastrados no sistema, com opções de paginação."""
     pedidos = crud.get_all_pedidos(db, skip=skip, limit=limit)
     return pedidos
 
-@app.get("/pedidos/{pedido_id}", response_model=schemas.Pedido)
+@app.get(
+    "/pedidos/{pedido_id}", 
+    response_model=schemas.Pedido, 
+    summary="Obter Pedido por ID", 
+    tags=["Pedidos"]
+)
 def obter_pedido(pedido_id: uuid.UUID, db: Session = Depends(get_db)):
+    """Retorna os detalhes de um pedido específico pelo seu ID."""
     db_pedido = crud.get_pedido(db, pedido_id=pedido_id)
     if db_pedido is None:
         raise HTTPException(status_code=404, detail="Pedido não encontrado")
     return db_pedido
 
-@app.get("/pedidos/cliente/{cliente_id}", response_model=List[schemas.Pedido])
-def listar_pedidos_cliente(cliente_id: uuid.UUID, skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
+@app.get(
+    "/pedidos/cliente/{cliente_id}", 
+    response_model=List[schemas.Pedido], 
+    summary="Listar Pedidos por Cliente", 
+    tags=["Pedidos"]
+)
+def listar_pedidos_cliente(
+    cliente_id: uuid.UUID, 
+    skip: int = Query(0, description="Número de itens a pular (offset)"), 
+    limit: int = Query(100, description="Número máximo de itens a retornar"), 
+    db: Session = Depends(get_db)
+):
+    """Retorna todos os pedidos feitos por um cliente específico."""
     pedidos = crud.get_pedidos_by_cliente(db, cliente_id=cliente_id, skip=skip, limit=limit)
     return pedidos
 
-@app.get("/pedidos/restaurante/{restaurante_id}", response_model=List[schemas.Pedido])
-def listar_pedidos_restaurante(restaurante_id: uuid.UUID, skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
+@app.get(
+    "/pedidos/restaurante/{restaurante_id}", 
+    response_model=List[schemas.Pedido], 
+    summary="Listar Pedidos por Restaurante", 
+    tags=["Pedidos"]
+)
+def listar_pedidos_restaurante(
+    restaurante_id: uuid.UUID, 
+    skip: int = Query(0, description="Número de itens a pular (offset)"), 
+    limit: int = Query(100, description="Número máximo de itens a retornar"), 
+    db: Session = Depends(get_db)
+):
+    """Retorna todos os pedidos direcionados a um restaurante específico."""
     pedidos = crud.get_pedidos_by_restaurante(db, restaurante_id=restaurante_id, skip=skip, limit=limit)
     return pedidos
 
-@app.put("/pedidos/{pedido_id}/status")
-def atualizar_status_pedido(pedido_id: uuid.UUID, status: str, db: Session = Depends(get_db)):
+@app.put(
+    "/pedidos/{pedido_id}/status", 
+    response_model=schemas.Pedido, 
+    summary="Atualizar Status do Pedido", 
+    tags=["Pedidos"]
+)
+def atualizar_status_pedido(
+    pedido_id: uuid.UUID, 
+    status: str = Query(..., description="Novo status do pedido (ex: CONFIRMADO, EM_PREPARO, A_CAMINHO, ENTREGUE)"), 
+    db: Session = Depends(get_db)
+):
+    """
+    Atualiza o status de um pedido. 
+    Publica o evento 'PEDIDO_STATUS_ATUALIZADO' no Redis.
+    """
     db_pedido = crud.update_pedido_status(db, pedido_id=pedido_id, status=status)
     if db_pedido is None:
         raise HTTPException(status_code=404, detail="Pedido não encontrado")
@@ -293,14 +365,20 @@ def atualizar_status_pedido(pedido_id: uuid.UUID, status: str, db: Session = Dep
         "restaurante_id": str(db_pedido.restaurante_id) if db_pedido else None,
         "motivo": "Atualização manual"
     }
-    redis_client.publish("pedidos", json.dumps(evento))
+    publicar_evento("pedidos", evento)
     
     print(f"🔄 Status do pedido {pedido_id} atualizado para: {status}")
     
-    return {"message": "Status atualizado com sucesso", "pedido_id": str(pedido_id), "status": status}
+    return db_pedido
 
-@app.delete("/pedidos/{pedido_id}")
+@app.delete(
+    "/pedidos/{pedido_id}", 
+    summary="Deletar Pedido", 
+    tags=["Pedidos"],
+    status_code=status.HTTP_204_NO_CONTENT
+)
 def deletar_pedido(pedido_id: uuid.UUID, db: Session = Depends(get_db)):
+    """Deleta um pedido do banco de dados. Esta operação é irreversível."""
     db_pedido = crud.delete_pedido(db, pedido_id=pedido_id)
     if db_pedido is None:
         raise HTTPException(status_code=404, detail="Pedido não encontrado")
@@ -310,9 +388,23 @@ def deletar_pedido(pedido_id: uuid.UUID, db: Session = Depends(get_db)):
         "tipo": "PEDIDO_DELETED",
         "pedido_id": str(pedido_id)
     }
-    redis_client.publish("pedidos", json.dumps(evento))
+    publicar_evento("pedidos", evento)
     
     return {"message": "Pedido deletado com sucesso"}
+
+# Novo endpoint para testar a validação de CEP
+@app.get("/cep/validar/{cep}", summary="Validar CEP", tags=["Utilitários"])
+def validar_cep(cep: str):
+    """
+    Endpoint para testar a validação de CEP com a API externa ViaCEP.
+    Retorna os dados de endereço encontrados ou um erro de validação.
+    """
+    resultado = validar_e_completar_endereco(cep)
+    return {
+        "cep_consultado": cep,
+        "api_externa": "ViaCEP",
+        "resultado": resultado
+    }
 
 if __name__ == "__main__":
     import uvicorn
