@@ -10,7 +10,8 @@ import threading
 import time
 from typing import List
 from contextlib import asynccontextmanager
-from datetime import datetime # Importar datetime para uso no evento
+from datetime import datetime
+from pydantic import ValidationError
 
 # Criar tabelas
 models.Base.metadata.create_all(bind=engine)
@@ -217,6 +218,25 @@ def criar_pedido(pedido: schemas.PedidoCreate, db: Session = Depends(get_db)):
     Após a criação, publica o evento 'PEDIDO_CRIADO' no Redis.
     """
     try:
+        # Validações básicas dos dados
+        if not pedido.itens or len(pedido.itens) == 0:
+            raise HTTPException(
+                status_code=400,
+                detail="Pedido deve conter pelo menos um item"
+            )
+        
+        for item in pedido.itens:
+            if item.quantidade <= 0:
+                raise HTTPException(
+                    status_code=400,
+                    detail="Quantidade do item deve ser maior que zero"
+                )
+            if item.preco_unitario <= 0:
+                raise HTTPException(
+                    status_code=400,
+                    detail="Preço unitário do item deve ser maior que zero"
+                )
+        
         # VALIDAÇÃO DO CEP COM API EXTERNA VIAcep
         cep = pedido.endereco_entrega.cep
         validacao_cep = validar_e_completar_endereco(cep)
@@ -270,12 +290,14 @@ def criar_pedido(pedido: schemas.PedidoCreate, db: Session = Depends(get_db)):
         
         return db_pedido
         
+    except ValidationError as e:
+        raise HTTPException(status_code=422, detail=str(e))
     except HTTPException:
         raise
     except Exception as e:
         raise HTTPException(
             status_code=500,
-            detail=f"Erro ao criar pedido: {str(e)}"
+            detail=f"Erro interno ao criar pedido: {str(e)}"
         )
 
 @app.get(
@@ -285,13 +307,19 @@ def criar_pedido(pedido: schemas.PedidoCreate, db: Session = Depends(get_db)):
     tags=["Pedidos"]
 )
 def listar_pedidos(
-    skip: int = Query(0, description="Número de itens a pular (offset)"), 
-    limit: int = Query(100, description="Número máximo de itens a retornar"), 
+    skip: int = Query(0, ge=0, description="Número de itens a pular (offset)"), 
+    limit: int = Query(100, ge=1, le=1000, description="Número máximo de itens a retornar"), 
     db: Session = Depends(get_db)
 ):
     """Retorna uma lista de todos os pedidos cadastrados no sistema, com opções de paginação."""
-    pedidos = crud.get_all_pedidos(db, skip=skip, limit=limit)
-    return pedidos
+    try:
+        pedidos = crud.get_all_pedidos(db, skip=skip, limit=limit)
+        return pedidos
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Erro ao listar pedidos: {str(e)}"
+        )
 
 @app.get(
     "/pedidos/{pedido_id}", 
@@ -301,10 +329,18 @@ def listar_pedidos(
 )
 def obter_pedido(pedido_id: uuid.UUID, db: Session = Depends(get_db)):
     """Retorna os detalhes de um pedido específico pelo seu ID."""
-    db_pedido = crud.get_pedido(db, pedido_id=pedido_id)
-    if db_pedido is None:
-        raise HTTPException(status_code=404, detail="Pedido não encontrado")
-    return db_pedido
+    try:
+        db_pedido = crud.get_pedido(db, pedido_id=pedido_id)
+        if db_pedido is None:
+            raise HTTPException(status_code=404, detail="Pedido não encontrado")
+        return db_pedido
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Erro ao obter pedido: {str(e)}"
+        )
 
 @app.get(
     "/pedidos/cliente/{cliente_id}", 
@@ -314,13 +350,19 @@ def obter_pedido(pedido_id: uuid.UUID, db: Session = Depends(get_db)):
 )
 def listar_pedidos_cliente(
     cliente_id: uuid.UUID, 
-    skip: int = Query(0, description="Número de itens a pular (offset)"), 
-    limit: int = Query(100, description="Número máximo de itens a retornar"), 
+    skip: int = Query(0, ge=0, description="Número de itens a pular (offset)"), 
+    limit: int = Query(100, ge=1, le=1000, description="Número máximo de itens a retornar"), 
     db: Session = Depends(get_db)
 ):
     """Retorna todos os pedidos feitos por um cliente específico."""
-    pedidos = crud.get_pedidos_by_cliente(db, cliente_id=cliente_id, skip=skip, limit=limit)
-    return pedidos
+    try:
+        pedidos = crud.get_pedidos_by_cliente(db, cliente_id=cliente_id, skip=skip, limit=limit)
+        return pedidos
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Erro ao listar pedidos do cliente: {str(e)}"
+        )
 
 @app.get(
     "/pedidos/restaurante/{restaurante_id}", 
@@ -330,13 +372,19 @@ def listar_pedidos_cliente(
 )
 def listar_pedidos_restaurante(
     restaurante_id: uuid.UUID, 
-    skip: int = Query(0, description="Número de itens a pular (offset)"), 
-    limit: int = Query(100, description="Número máximo de itens a retornar"), 
+    skip: int = Query(0, ge=0, description="Número de itens a pular (offset)"), 
+    limit: int = Query(100, ge=1, le=1000, description="Número máximo de itens a retornar"), 
     db: Session = Depends(get_db)
 ):
     """Retorna todos os pedidos direcionados a um restaurante específico."""
-    pedidos = crud.get_pedidos_by_restaurante(db, restaurante_id=restaurante_id, skip=skip, limit=limit)
-    return pedidos
+    try:
+        pedidos = crud.get_pedidos_by_restaurante(db, restaurante_id=restaurante_id, skip=skip, limit=limit)
+        return pedidos
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Erro ao listar pedidos do restaurante: {str(e)}"
+        )
 
 @app.put(
     "/pedidos/{pedido_id}/status", 
@@ -346,30 +394,47 @@ def listar_pedidos_restaurante(
 )
 def atualizar_status_pedido(
     pedido_id: uuid.UUID, 
-    status: str = Query(..., description="Novo status do pedido (ex: CONFIRMADO, EM_PREPARO, A_CAMINHO, ENTREGUE)"), 
+    status: str = Query(..., description="Novo status do pedido (CONFIRMADO, EM_PREPARO, A_CAMINHO, ENTREGUE, CANCELADO)"), 
     db: Session = Depends(get_db)
 ):
     """
     Atualiza o status de um pedido. 
     Publica o evento 'PEDIDO_STATUS_ATUALIZADO' no Redis.
     """
-    db_pedido = crud.update_pedido_status(db, pedido_id=pedido_id, status=status)
-    if db_pedido is None:
-        raise HTTPException(status_code=404, detail="Pedido não encontrado")
-    
-    # Publicar evento
-    evento = {
-        "tipo": "PEDIDO_STATUS_ATUALIZADO",
-        "pedido_id": str(pedido_id),
-        "status": status,
-        "restaurante_id": str(db_pedido.restaurante_id) if db_pedido else None,
-        "motivo": "Atualização manual"
-    }
-    publicar_evento("pedidos", evento)
-    
-    print(f"🔄 Status do pedido {pedido_id} atualizado para: {status}")
-    
-    return db_pedido
+    try:
+        # Validação do status
+        status_validos = ["PENDENTE", "CONFIRMADO", "EM_PREPARO", "A_CAMINHO", "ENTREGUE", "CANCELADO"]
+        if status not in status_validos:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Status inválido. Use: {', '.join(status_validos)}"
+            )
+        
+        db_pedido = crud.update_pedido_status(db, pedido_id=pedido_id, status=status)
+        if db_pedido is None:
+            raise HTTPException(status_code=404, detail="Pedido não encontrado")
+        
+        # Publicar evento
+        evento = {
+            "tipo": "PEDIDO_STATUS_ATUALIZADO",
+            "pedido_id": str(pedido_id),
+            "status": status,
+            "restaurante_id": str(db_pedido.restaurante_id) if db_pedido else None,
+            "motivo": "Atualização manual"
+        }
+        publicar_evento("pedidos", evento)
+        
+        print(f"🔄 Status do pedido {pedido_id} atualizado para: {status}")
+        
+        return db_pedido
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Erro ao atualizar status do pedido: {str(e)}"
+        )
 
 @app.delete(
     "/pedidos/{pedido_id}", 
@@ -379,18 +444,27 @@ def atualizar_status_pedido(
 )
 def deletar_pedido(pedido_id: uuid.UUID, db: Session = Depends(get_db)):
     """Deleta um pedido do banco de dados. Esta operação é irreversível."""
-    db_pedido = crud.delete_pedido(db, pedido_id=pedido_id)
-    if db_pedido is None:
-        raise HTTPException(status_code=404, detail="Pedido não encontrado")
-    
-    # Publicar evento
-    evento = {
-        "tipo": "PEDIDO_DELETED",
-        "pedido_id": str(pedido_id)
-    }
-    publicar_evento("pedidos", evento)
-    
-    return {"message": "Pedido deletado com sucesso"}
+    try:
+        db_pedido = crud.delete_pedido(db, pedido_id=pedido_id)
+        if db_pedido is None:
+            raise HTTPException(status_code=404, detail="Pedido não encontrado")
+        
+        # Publicar evento
+        evento = {
+            "tipo": "PEDIDO_DELETED",
+            "pedido_id": str(pedido_id)
+        }
+        publicar_evento("pedidos", evento)
+        
+        return None  # 204 No Content
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Erro ao deletar pedido: {str(e)}"
+        )
 
 # Novo endpoint para testar a validação de CEP
 @app.get("/cep/validar/{cep}", summary="Validar CEP", tags=["Utilitários"])
@@ -399,12 +473,18 @@ def validar_cep(cep: str):
     Endpoint para testar a validação de CEP com a API externa ViaCEP.
     Retorna os dados de endereço encontrados ou um erro de validação.
     """
-    resultado = validar_e_completar_endereco(cep)
-    return {
-        "cep_consultado": cep,
-        "api_externa": "ViaCEP",
-        "resultado": resultado
-    }
+    try:
+        resultado = validar_e_completar_endereco(cep)
+        return {
+            "cep_consultado": cep,
+            "api_externa": "ViaCEP",
+            "resultado": resultado
+        }
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Erro ao validar CEP: {str(e)}"
+        )
 
 if __name__ == "__main__":
     import uvicorn

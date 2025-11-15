@@ -11,7 +11,8 @@ import threading
 import time
 from typing import List
 from contextlib import asynccontextmanager
-from datetime import datetime # Importar datetime para uso no evento
+from datetime import datetime
+from pydantic import ValidationError
 
 # Criar tabelas
 models.Base.metadata.create_all(bind=engine)
@@ -69,11 +70,6 @@ def escutar_eventos_pedidos():
                             print(f"   👤 Cliente: {cliente_id}")
                             print(f"   💰 Valor: R$ {total}")
                             print(f"   📊 Registrado no sistema de analytics de pagamentos")
-                            
-                            # Em um sistema real, poderia:
-                            # - Salvar em banco de analytics
-                            # - Pré-processar para fraud detection
-                            # - Atualizar métricas em tempo real
                             
                         elif evento.get('tipo') == 'PEDIDO_STATUS_ATUALIZADO':
                             pedido_id = evento['pedido_id']
@@ -196,18 +192,40 @@ async def criar_pagamento(
     Cria um novo registro de pagamento e inicia o processamento assíncrono.
     O processamento simula a comunicação com um gateway externo e publica o evento 'PAGAMENTO_PROCESSADO'.
     """
-    # Verificar se já existe pagamento para este pedido
-    existing_pagamento = crud.get_pagamento_by_pedido_id(db, pedido_id=pagamento.pedido_id)
-    if existing_pagamento:
-        raise HTTPException(status_code=400, detail="Já existe um pagamento para este pedido")
-    
-    # Criar pagamento no banco
-    db_pagamento = crud.create_pagamento(db=db, pagamento=pagamento)
-    
-    # Processar pagamento em background
-    background_tasks.add_task(processar_pagamento_em_background, db_pagamento.id)
-    
-    return db_pagamento
+    try:
+        # Validações adicionais
+        if pagamento.valor <= 0:
+            raise HTTPException(
+                status_code=400, 
+                detail="Valor do pagamento deve ser maior que zero"
+            )
+        
+        if pagamento.metodo_pagamento not in ["cartao", "pix", "dinheiro"]:
+            raise HTTPException(
+                status_code=400,
+                detail="Método de pagamento inválido. Use: cartao, pix ou dinheiro"
+            )
+        
+        # Verificar se já existe pagamento para este pedido
+        existing_pagamento = crud.get_pagamento_by_pedido(db, pedido_id=pagamento.pedido_id)
+        if existing_pagamento:
+            raise HTTPException(
+                status_code=400, 
+                detail="Já existe um pagamento para este pedido"
+            )
+        
+        # Criar pagamento no banco
+        db_pagamento = crud.create_pagamento(db=db, pagamento=pagamento)
+        
+        # Processar pagamento em background
+        background_tasks.add_task(processar_pagamento_em_background, db_pagamento.id)
+        
+        return db_pagamento
+        
+    except ValidationError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Erro interno: {str(e)}")
 
 @app.get(
     "/pagamentos/", 
@@ -216,13 +234,16 @@ async def criar_pagamento(
     tags=["Pagamentos"]
 )
 def listar_pagamentos(
-    skip: int = Query(0, description="Número de itens a pular (offset)"), 
-    limit: int = Query(100, description="Número máximo de itens a retornar"), 
+    skip: int = Query(0, ge=0, description="Número de itens a pular (offset)"), 
+    limit: int = Query(100, ge=1, le=1000, description="Número máximo de itens a retornar"), 
     db: Session = Depends(get_db)
 ):
     """Retorna uma lista de todos os pagamentos cadastrados, com opções de paginação."""
-    pagamentos = crud.get_pagamentos(db, skip=skip, limit=limit)
-    return pagamentos
+    try:
+        pagamentos = crud.get_pagamentos(db, skip=skip, limit=limit)
+        return pagamentos
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Erro ao listar pagamentos: {str(e)}")
 
 @app.get(
     "/pagamentos/{pagamento_id}", 
@@ -232,10 +253,15 @@ def listar_pagamentos(
 )
 def obter_pagamento(pagamento_id: uuid.UUID, db: Session = Depends(get_db)):
     """Retorna os detalhes de um pagamento específico pelo seu ID."""
-    db_pagamento = crud.get_pagamento(db, pagamento_id=pagamento_id)
-    if db_pagamento is None:
-        raise HTTPException(status_code=404, detail="Pagamento não encontrado")
-    return db_pagamento
+    try:
+        db_pagamento = crud.get_pagamento(db, pagamento_id=pagamento_id)
+        if db_pagamento is None:
+            raise HTTPException(status_code=404, detail="Pagamento não encontrado")
+        return db_pagamento
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Erro ao obter pagamento: {str(e)}")
 
 @app.get(
     "/pagamentos/pedido/{pedido_id}", 
@@ -245,10 +271,18 @@ def obter_pagamento(pagamento_id: uuid.UUID, db: Session = Depends(get_db)):
 )
 def obter_pagamento_por_pedido(pedido_id: uuid.UUID, db: Session = Depends(get_db)):
     """Retorna o pagamento associado a um pedido específico."""
-    db_pagamento = crud.get_pagamento_by_pedido_id(db, pedido_id=pedido_id)
-    if db_pagamento is None:
-        raise HTTPException(status_code=404, detail="Pagamento não encontrado para este pedido")
-    return db_pagamento
+    try:
+        db_pagamento = crud.get_pagamento_by_pedido(db, pedido_id=pedido_id)
+        if db_pagamento is None:
+            raise HTTPException(
+                status_code=404, 
+                detail="Pagamento não encontrado para este pedido"
+            )
+        return db_pagamento
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Erro ao obter pagamento: {str(e)}")
 
 @app.put(
     "/pagamentos/{pagamento_id}", 
@@ -261,14 +295,27 @@ def atualizar_pagamento(pagamento_id: uuid.UUID, pagamento_update: schemas.Pagam
     Atualiza o status ou informações de transação de um pagamento existente.
     Publica o evento 'PAGAMENTO_PROCESSADO' com o novo status.
     """
-    db_pagamento = crud.update_pagamento(db, pagamento_id=pagamento_id, pagamento_update=pagamento_update)
-    if db_pagamento is None:
-        raise HTTPException(status_code=404, detail="Pagamento não encontrado")
-    
-    # Publicar evento de pagamento processado com o novo status
-    publicar_evento_pagamento(db_pagamento.id, db_pagamento.pedido_id, db_pagamento.status)
-    
-    return db_pagamento
+    try:
+        # Validações de status
+        if pagamento_update.status and pagamento_update.status not in ["PENDENTE", "APROVADO", "REPROVADO", "FALHA", "ESTORNADO"]:
+            raise HTTPException(
+                status_code=400,
+                detail="Status inválido. Use: PENDENTE, APROVADO, REPROVADO, FALHA ou ESTORNADO"
+            )
+        
+        db_pagamento = crud.update_pagamento(db, pagamento_id=pagamento_id, pagamento_update=pagamento_update)
+        if db_pagamento is None:
+            raise HTTPException(status_code=404, detail="Pagamento não encontrado")
+        
+        # Publicar evento de pagamento processado com o novo status
+        publicar_evento_pagamento(db_pagamento.id, db_pagamento.pedido_id, db_pagamento.status)
+        
+        return db_pagamento
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Erro ao atualizar pagamento: {str(e)}")
 
 @app.delete(
     "/pagamentos/{pagamento_id}", 
@@ -278,10 +325,15 @@ def atualizar_pagamento(pagamento_id: uuid.UUID, pagamento_update: schemas.Pagam
 )
 def deletar_pagamento(pagamento_id: uuid.UUID, db: Session = Depends(get_db)):
     """Deleta um registro de pagamento do banco de dados. Esta operação é irreversível."""
-    db_pagamento = crud.delete_pagamento(db, pagamento_id=pagamento_id)
-    if db_pagamento is None:
-        raise HTTPException(status_code=404, detail="Pagamento não encontrado")
-    return {"message": "Pagamento deletado com sucesso"}
+    try:
+        db_pagamento = crud.delete_pagamento(db, pagamento_id=pagamento_id)
+        if db_pagamento is None:
+            raise HTTPException(status_code=404, detail="Pagamento não encontrado")
+        return None  # 204 No Content
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Erro ao deletar pagamento: {str(e)}")
 
 # ESTORNOS
 @app.post(
@@ -296,18 +348,39 @@ def criar_estorno(estorno: schemas.EstornoCreate, db: Session = Depends(get_db))
     Cria um novo registro de estorno para um pagamento. 
     Publica o evento 'ESTORNO_PROCESSADO' no Redis.
     """
-    db_estorno = crud.create_estorno(db=db, estorno=estorno)
-    
-    # Publicar evento de estorno (para notificar outros serviços, como o de pedidos)
-    evento_estorno = {
-        "tipo": "ESTORNO_PROCESSADO",
-        "estorno_id": str(db_estorno.id),
-        "pagamento_id": str(db_estorno.pagamento_id),
-        "valor_estornado": db_estorno.valor_estornado
-    }
-    publicar_evento("pagamentos", evento_estorno)
-    
-    return db_estorno
+    try:
+        # Verificar se o pagamento existe
+        pagamento = crud.get_pagamento(db, pagamento_id=estorno.pagamento_id)
+        if not pagamento:
+            raise HTTPException(status_code=404, detail="Pagamento não encontrado")
+        
+        # Validar valor do estorno
+        if estorno.valor_estornado <= 0:
+            raise HTTPException(status_code=400, detail="Valor do estorno deve ser maior que zero")
+        
+        if estorno.valor_estornado > pagamento.valor:
+            raise HTTPException(
+                status_code=400, 
+                detail="Valor do estorno não pode ser maior que o valor do pagamento"
+            )
+        
+        db_estorno = crud.create_estorno(db=db, estorno=estorno)
+        
+        # Publicar evento de estorno (para notificar outros serviços, como o de pedidos)
+        evento_estorno = {
+            "tipo": "ESTORNO_PROCESSADO",
+            "estorno_id": str(db_estorno.id),
+            "pagamento_id": str(db_estorno.pagamento_id),
+            "valor_estornado": db_estorno.valor_estornado
+        }
+        publicar_evento("pagamentos", evento_estorno)
+        
+        return db_estorno
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Erro ao criar estorno: {str(e)}")
 
 @app.get(
     "/estornos/pagamento/{pagamento_id}", 
@@ -317,8 +390,11 @@ def criar_estorno(estorno: schemas.EstornoCreate, db: Session = Depends(get_db))
 )
 def listar_estornos_pagamento(pagamento_id: uuid.UUID, db: Session = Depends(get_db)):
     """Retorna todos os estornos associados a um pagamento específico."""
-    estornos = crud.get_estornos_by_pagamento(db, pagamento_id=pagamento_id)
-    return estornos
+    try:
+        estornos = crud.get_estornos_by_pagamento(db, pagamento_id=pagamento_id)
+        return estornos
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Erro ao listar estornos: {str(e)}")
 
 if __name__ == "__main__":
     import uvicorn

@@ -7,27 +7,22 @@ import redis
 import json
 import threading
 import os
+import time
+from contextlib import asynccontextmanager
 from sendgrid import SendGridAPIClient
 from sendgrid.helpers.mail import Mail
 from typing import List
+from pydantic import ValidationError
 
 # Criar tabelas
 models.Base.metadata.create_all(bind=engine)
 
-app = FastAPI(
-    title="Restaurantes Service",
-    description="Microsserviço para gerenciamento de restaurantes, categorias e produtos. Responsável por notificar restaurantes sobre novos pedidos via e-mail.",
-    version="1.0.0",
-    openapi_tags=[
-        {"name": "Restaurantes", "description": "Endpoints para gerenciar restaurantes."},
-        {"name": "Categorias", "description": "Endpoints para gerenciar categorias de produtos."},
-        {"name": "Produtos", "description": "Endpoints para gerenciar produtos de restaurantes."},
-        {"name": "Interno", "description": "Endpoints internos ou de saúde do serviço."}
-    ]
-)
-
 # Redis
 redis_client = redis.Redis(host='redis', port=6379, decode_responses=True)
+
+# 🔥 VARIÁVEIS GLOBAIS PARA CONTROLE DO LISTENER
+listener_thread = None
+listener_stop_event = threading.Event()
 
 # Configurações do SendGrid
 SENDGRID_API_KEY = os.getenv('SENDGRID_API_KEY', 'xxx')
@@ -90,147 +85,197 @@ def obter_nome_restaurante(restaurante_id: str) -> str:
 # LISTENER ASSÍNCRONO PARA EVENTOS DE PEDIDOS
 def escutar_eventos_pedidos():
     """Escuta eventos de pedidos para notificar restaurantes"""
-    pubsub = redis_client.pubsub()
-    pubsub.subscribe('pedidos')
-    
     print("🎧 Restaurantes Service: Iniciando listener de eventos de pedidos...")
     
-    for message in pubsub.listen():
-        if message['type'] == 'message':
-            try:
-                evento = json.loads(message['data'])
+    while not listener_stop_event.is_set():
+        try:
+            pubsub = redis_client.pubsub()
+            pubsub.subscribe('pedidos')
+            
+            print("✅ Inscrito no canal 'pedidos'. Aguardando eventos...")
+            
+            while not listener_stop_event.is_set():
+                message = pubsub.get_message(timeout=1.0, ignore_subscribe_messages=True)
                 
-                if evento.get('tipo') == 'PEDIDO_CRIADO':
-                    restaurante_id = evento['restaurante_id']
-                    pedido_id = evento['pedido_id']
-                    total = evento['total']
-                    cliente_id = evento['cliente_id']
-                    
-                    # BUSCAR INFORMAÇÕES DO RESTAURANTE NO BANCO
-                    email_restaurante = obter_email_restaurante(restaurante_id)
-                    nome_restaurante = obter_nome_restaurante(restaurante_id)
-                    
-                    print(f"🏪 🆕 NOVO PEDIDO RECEBIDO!")
-                    print(f"   📋 Pedido ID: {pedido_id}")
-                    print(f"   🏠 Restaurante: {nome_restaurante} ({restaurante_id})")
-                    print(f"   📧 Email: {email_restaurante}")
-                    print(f"   👤 Cliente: {cliente_id}")
-                    print(f"   💰 Valor Total: R$ {total:.2f}")
-                    
-                    # ENVIAR EMAIL PARA O RESTAURANTE
-                    assunto = f"🍕 Novo Pedido Recebido - #{pedido_id[:8]}"
-                    corpo_html = f"""
-                    <!DOCTYPE html>
-                    <html>
-                    <head>
-                        <style>
-                            body {{ font-family: Arial, sans-serif; }}
-                            .container {{ max-width: 600px; margin: 0 auto; padding: 20px; }}
-                            .header {{ background: #ff6b35; color: white; padding: 20px; text-align: center; }}
-                            .content {{ padding: 20px; background: #f9f9f9; }}
-                            .footer {{ text-align: center; padding: 20px; color: #666; }}
-                            .pedido-info {{ background: white; padding: 15px; margin: 10px 0; border-radius: 5px; }}
-                            .restaurante-nome {{ font-size: 18px; font-weight: bold; color: #ff6b35; }}
-                        </style>
-                    </head>
-                    <body>
-                        <div class="container">
-                            <div class="header">
-                                <h1>🍕 Novo Pedido Recebido!</h1>
-                                <p class="restaurante-nome">{nome_restaurante}</p>
-                            </div>
-                            <div class="content">
-                                <h2>Detalhes do Pedido</h2>
-                                <div class="pedido-info">
-                                    <p><strong>Número do Pedido:</strong> {pedido_id}</p>
-                                    <p><strong>Restaurante:</strong> {nome_restaurante}</p>
-                                    <p><strong>Cliente ID:</strong> {cliente_id}</p>
-                                    <p><strong>Valor Total:</strong> R$ {total:.2f}</p>
-                                    <p><strong>Status:</strong> Aguardando confirmação</p>
-                                    <p><strong>Data/Hora:</strong> {json.loads(message['data']).get('timestamp', 'Agora')}</p>
-                                </div>
-                                <p><strong>⚠️ ATENÇÃO:</strong> Prepare o pedido o mais rápido possível!</p>
-                                <p>Acesse o sistema para mais detalhes e para confirmar o pedido.</p>
-                            </div>
-                            <div class="footer">
-                                <p>Delivery System - Seu sistema de delivery profissional</p>
-                                <p>Este é um email automático, não responda.</p>
-                            </div>
-                        </div>
-                    </body>
-                    </html>
-                    """
-                    
-                    # Enviar email
-                    email_enviado = enviar_email_restaurante(email_restaurante, assunto, corpo_html)
-                    
-                    if email_enviado:
-                        print(f"   📧 Email de notificação enviado para: {email_restaurante}")
-                        print(f"   🔔 Notificação enviada para o restaurante {nome_restaurante}!")
-                    else:
-                        print(f"   ⚠️  Falha ao enviar email para: {email_restaurante}")
-                    
-                elif evento.get('tipo') == 'PEDIDO_STATUS_ATUALIZADO':
-                    pedido_id = evento['pedido_id']
-                    status = evento['status']
-                    restaurante_id = evento.get('restaurante_id')
-                    
-                    print(f"🔄 ATUALIZAÇÃO DE PEDIDO: {pedido_id}")
-                    print(f"   📊 Novo Status: {status}")
-                    
-                    # Enviar email para atualizações importantes
-                    if status == 'CONFIRMADO' and restaurante_id:
-                        print(f"   ✅ Pedido confirmado - preparar para produção!")
+                if message:
+                    try:
+                        evento = json.loads(message['data'])
                         
-                        # BUSCAR INFORMAÇÕES DO RESTAURANTE NO BANCO
-                        email_restaurante = obter_email_restaurante(restaurante_id)
-                        nome_restaurante = obter_nome_restaurante(restaurante_id)
-                        
-                        # Email de confirmação
-                        assunto = f"✅ Pedido Confirmado - #{pedido_id[:8]}"
-                        corpo_html = f"""
-                        <!DOCTYPE html>
-                        <html>
-                        <body>
-                            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-                                <div style="background: #28a745; color: white; padding: 20px; text-align: center;">
-                                    <h1>✅ Pedido Confirmado!</h1>
-                                    <p style="font-size: 18px; font-weight: bold;">{nome_restaurante}</p>
-                                </div>
-                                <div style="padding: 20px; background: #f9f9f9;">
-                                    <h2>Pedido Pronto para Produção</h2>
-                                    <div style="background: white; padding: 15px; margin: 10px 0; border-radius: 5px;">
-                                        <p><strong>Número do Pedido:</strong> {pedido_id}</p>
-                                        <p><strong>Restaurante:</strong> {nome_restaurante}</p>
-                                        <p><strong>Status:</strong> CONFIRMADO</p>
+                        if evento.get('tipo') == 'PEDIDO_CRIADO':
+                            restaurante_id = evento['restaurante_id']
+                            pedido_id = evento['pedido_id']
+                            total = evento['total']
+                            cliente_id = evento['cliente_id']
+                            
+                            # BUSCAR INFORMAÇÕES DO RESTAURANTE NO BANCO
+                            email_restaurante = obter_email_restaurante(restaurante_id)
+                            nome_restaurante = obter_nome_restaurante(restaurante_id)
+                            
+                            print(f"🏪 🆕 NOVO PEDIDO RECEBIDO!")
+                            print(f"   📋 Pedido ID: {pedido_id}")
+                            print(f"   🏠 Restaurante: {nome_restaurante} ({restaurante_id})")
+                            print(f"   📧 Email: {email_restaurante}")
+                            print(f"   👤 Cliente: {cliente_id}")
+                            print(f"   💰 Valor Total: R$ {total:.2f}")
+                            
+                            # ENVIAR EMAIL PARA O RESTAURANTE
+                            assunto = f"🍕 Novo Pedido Recebido - #{pedido_id[:8]}"
+                            corpo_html = f"""
+                            <!DOCTYPE html>
+                            <html>
+                            <head>
+                                <style>
+                                    body {{ font-family: Arial, sans-serif; }}
+                                    .container {{ max-width: 600px; margin: 0 auto; padding: 20px; }}
+                                    .header {{ background: #ff6b35; color: white; padding: 20px; text-align: center; }}
+                                    .content {{ padding: 20px; background: #f9f9f9; }}
+                                    .footer {{ text-align: center; padding: 20px; color: #666; }}
+                                    .pedido-info {{ background: white; padding: 15px; margin: 10px 0; border-radius: 5px; }}
+                                    .restaurante-nome {{ font-size: 18px; font-weight: bold; color: #ff6b35; }}
+                                </style>
+                            </head>
+                            <body>
+                                <div class="container">
+                                    <div class="header">
+                                        <h1>🍕 Novo Pedido Recebido!</h1>
+                                        <p class="restaurante-nome">{nome_restaurante}</p>
                                     </div>
-                                    <p><strong>🚀 INICIAR PREPARO:</strong> O pedido foi confirmado e está pronto para produção.</p>
-                                    <p>Inicie o preparo imediatamente para garantir a satisfação do cliente.</p>
+                                    <div class="content">
+                                        <h2>Detalhes do Pedido</h2>
+                                        <div class="pedido-info">
+                                            <p><strong>Número do Pedido:</strong> {pedido_id}</p>
+                                            <p><strong>Restaurante:</strong> {nome_restaurante}</p>
+                                            <p><strong>Cliente ID:</strong> {cliente_id}</p>
+                                            <p><strong>Valor Total:</strong> R$ {total:.2f}</p>
+                                            <p><strong>Status:</strong> Aguardando confirmação</p>
+                                            <p><strong>Data/Hora:</strong> {evento.get('timestamp', 'Agora')}</p>
+                                        </div>
+                                        <p><strong>⚠️ ATENÇÃO:</strong> Prepare o pedido o mais rápido possível!</p>
+                                        <p>Acesse o sistema para mais detalhes e para confirmar o pedido.</p>
+                                    </div>
+                                    <div class="footer">
+                                        <p>Delivery System - Seu sistema de delivery profissional</p>
+                                        <p>Este é um email automático, não responda.</p>
+                                    </div>
                                 </div>
-                                <div style="text-align: center; padding: 20px; color: #666;">
-                                    <p>Delivery System - Sistema Automático de Notificações</p>
-                                </div>
-                            </div>
-                        </body>
-                        </html>
-                        """
-                        enviar_email_restaurante(email_restaurante, assunto, corpo_html)
-                        print(f"   📧 Email de confirmação enviado para: {nome_restaurante}")
+                            </body>
+                            </html>
+                            """
+                            
+                            # Enviar email
+                            email_enviado = enviar_email_restaurante(email_restaurante, assunto, corpo_html)
+                            
+                            if email_enviado:
+                                print(f"   📧 Email de notificação enviado para: {email_restaurante}")
+                                print(f"   🔔 Notificação enviada para o restaurante {nome_restaurante}!")
+                            else:
+                                print(f"   ⚠️  Falha ao enviar email para: {email_restaurante}")
                         
-                    elif status == 'EM_PREPARO':
-                        print(f"   👨‍🍳 Pedido em preparo - cozinha notificada!")
-                    elif status == 'A_CAMINHO':
-                        print(f"   🛵 Pedido a caminho - aguardar entregador!")
-                    elif status == 'ENTREGUE':
-                        print(f"   🎉 Pedido entregue - finalizado com sucesso!")
-                    elif status in ['CANCELADO', 'ESTORNADO']:
-                        print(f"   ❌ Pedido cancelado - verificar motivo!")
+                        elif evento.get('tipo') == 'PEDIDO_STATUS_ATUALIZADO':
+                            pedido_id = evento['pedido_id']
+                            status = evento['status']
+                            restaurante_id = evento.get('restaurante_id')
+                            
+                            print(f"🔄 ATUALIZAÇÃO DE PEDIDO: {pedido_id}")
+                            print(f"   📊 Novo Status: {status}")
+                            
+                            # Enviar email para atualizações importantes
+                            if status == 'CONFIRMADO' and restaurante_id:
+                                print(f"   ✅ Pedido confirmado - preparar para produção!")
+                                
+                                # BUSCAR INFORMAÇÕES DO RESTAURANTE NO BANCO
+                                email_restaurante = obter_email_restaurante(restaurante_id)
+                                nome_restaurante = obter_nome_restaurante(restaurante_id)
+                                
+                                # Email de confirmação
+                                assunto = f"✅ Pedido Confirmado - #{pedido_id[:8]}"
+                                corpo_html = f"""
+                                <!DOCTYPE html>
+                                <html>
+                                <body>
+                                    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+                                        <div style="background: #28a745; color: white; padding: 20px; text-align: center;">
+                                            <h1>✅ Pedido Confirmado!</h1>
+                                            <p style="font-size: 18px; font-weight: bold;">{nome_restaurante}</p>
+                                        </div>
+                                        <div style="padding: 20px; background: #f9f9f9;">
+                                            <h2>Pedido Pronto para Produção</h2>
+                                            <div style="background: white; padding: 15px; margin: 10px 0; border-radius: 5px;">
+                                                <p><strong>Número do Pedido:</strong> {pedido_id}</p>
+                                                <p><strong>Restaurante:</strong> {nome_restaurante}</p>
+                                                <p><strong>Status:</strong> CONFIRMADO</p>
+                                            </div>
+                                            <p><strong>🚀 INICIAR PREPARO:</strong> O pedido foi confirmado e está pronto para produção.</p>
+                                            <p>Inicie o preparo imediatamente para garantir a satisfação do cliente.</p>
+                                        </div>
+                                        <div style="text-align: center; padding: 20px; color: #666;">
+                                            <p>Delivery System - Sistema Automático de Notificações</p>
+                                        </div>
+                                    </div>
+                                </body>
+                                </html>
+                                """
+                                enviar_email_restaurante(email_restaurante, assunto, corpo_html)
+                                print(f"   📧 Email de confirmação enviado para: {nome_restaurante}")
+                                
+                            elif status == 'EM_PREPARO':
+                                print(f"   👨‍🍳 Pedido em preparo - cozinha notificada!")
+                            elif status == 'A_CAMINHO':
+                                print(f"   🛵 Pedido a caminho - aguardar entregador!")
+                            elif status == 'ENTREGUE':
+                                print(f"   🎉 Pedido entregue - finalizado com sucesso!")
+                            elif status in ['CANCELADO', 'ESTORNADO']:
+                                print(f"   ❌ Pedido cancelado - verificar motivo!")
+                                
+                    except Exception as e:
+                        print(f"❌ Erro ao processar evento: {e}")
+                
+                # Pequena pausa para não sobrecarregar a CPU
+                time.sleep(0.1)
                         
-            except Exception as e:
-                print(f"❌ Erro ao processar evento: {e}")
+        except Exception as e:
+            if not listener_stop_event.is_set():
+                print(f"❌ Erro no listener, reconectando...: {e}")
+                time.sleep(2)  # Espera antes de reconectar
+    
+    print("🛑 Listener de eventos de pedidos parado.")
 
-# INICIAR LISTENER EM THREAD SEPARADA
-threading.Thread(target=escutar_eventos_pedidos, daemon=True).start()
+# 🔥 LIFESPAN MODERNO (substitui o on_event deprecated)
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Startup
+    print("🚀 Restaurantes Service: Iniciando servidor...")
+    
+    # Iniciar o listener do Redis
+    listener_stop_event.clear()
+    listener_thread = threading.Thread(target=escutar_eventos_pedidos)
+    listener_thread.daemon = True
+    listener_thread.start()
+    print("✅ Listener de eventos de pedidos iniciado automaticamente!")
+    
+    yield  # Aqui o app está rodando
+    
+    # Shutdown
+    print("🛑 Restaurantes Service: Parando servidor...")
+    listener_stop_event.set()
+    
+    if listener_thread and listener_thread.is_alive():
+        listener_thread.join(timeout=5)
+        print("✅ Listener de eventos de pedidos parado corretamente.")
+
+# Criar app com lifespan
+app = FastAPI(
+    title="Restaurantes Service",
+    description="Microsserviço para gerenciamento de restaurantes, categorias e produtos. Responsável por notificar restaurantes sobre novos pedidos via e-mail.",
+    version="1.0.0",
+    lifespan=lifespan,
+    openapi_tags=[
+        {"name": "Restaurantes", "description": "Endpoints para gerenciar restaurantes."},
+        {"name": "Categorias", "description": "Endpoints para gerenciar categorias de produtos."},
+        {"name": "Produtos", "description": "Endpoints para gerenciar produtos de restaurantes."},
+        {"name": "Interno", "description": "Endpoints internos ou de saúde do serviço."}
+    ]
+)
 
 @app.get("/", summary="Status do Serviço", tags=["Interno"])
 def root():
@@ -247,10 +292,31 @@ def root():
 )
 def criar_restaurante(restaurante: schemas.RestauranteCreate, db: Session = Depends(get_db)):
     """Cria um novo restaurante no banco de dados. Requer um CNPJ único."""
-    db_restaurante = crud.get_restaurante_by_cnpj(db, cnpj=restaurante.cnpj)
-    if db_restaurante:
-        raise HTTPException(status_code=400, detail="CNPJ já cadastrado")
-    return crud.create_restaurante(db=db, restaurante=restaurante)
+    try:
+        # Validação adicional
+        if restaurante.taxa_entrega < 0:
+            raise HTTPException(
+                status_code=400,
+                detail="Taxa de entrega não pode ser negativa"
+            )
+        
+        db_restaurante = crud.get_restaurante_by_cnpj(db, cnpj=restaurante.cnpj)
+        if db_restaurante:
+            raise HTTPException(
+                status_code=400, 
+                detail="CNPJ já cadastrado"
+            )
+        return crud.create_restaurante(db=db, restaurante=restaurante)
+        
+    except ValidationError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Erro interno ao criar restaurante: {str(e)}"
+        )
 
 @app.get(
     "/restaurantes/", 
@@ -259,14 +325,20 @@ def criar_restaurante(restaurante: schemas.RestauranteCreate, db: Session = Depe
     tags=["Restaurantes"]
 )
 def listar_restaurantes(
-    skip: int = Query(0, description="Número de itens a pular (offset)"), 
-    limit: int = Query(100, description="Número máximo de itens a retornar"), 
+    skip: int = Query(0, ge=0, description="Número de itens a pular (offset)"), 
+    limit: int = Query(100, ge=1, le=1000, description="Número máximo de itens a retornar"), 
     ativo: bool = Query(True, description="Filtrar por restaurantes ativos"), 
     db: Session = Depends(get_db)
 ):
     """Retorna uma lista de todos os restaurantes cadastrados, com opções de paginação e filtro por status de atividade."""
-    restaurantes = crud.get_restaurantes(db, skip=skip, limit=limit, ativo=ativo)
-    return restaurantes
+    try:
+        restaurantes = crud.get_restaurantes(db, skip=skip, limit=limit, ativo=ativo)
+        return restaurantes
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Erro ao listar restaurantes: {str(e)}"
+        )
 
 @app.get(
     "/restaurantes/{restaurante_id}", 
@@ -276,10 +348,18 @@ def listar_restaurantes(
 )
 def obter_restaurante(restaurante_id: uuid.UUID, db: Session = Depends(get_db)):
     """Retorna os detalhes de um restaurante específico pelo seu ID."""
-    db_restaurante = crud.get_restaurante(db, restaurante_id=restaurante_id)
-    if db_restaurante is None:
-        raise HTTPException(status_code=404, detail="Restaurante não encontrado")
-    return db_restaurante
+    try:
+        db_restaurante = crud.get_restaurante(db, restaurante_id=restaurante_id)
+        if db_restaurante is None:
+            raise HTTPException(status_code=404, detail="Restaurante não encontrado")
+        return db_restaurante
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Erro ao obter restaurante: {str(e)}"
+        )
 
 @app.put(
     "/restaurantes/{restaurante_id}", 
@@ -289,10 +369,28 @@ def obter_restaurante(restaurante_id: uuid.UUID, db: Session = Depends(get_db)):
 )
 def atualizar_restaurante(restaurante_id: uuid.UUID, restaurante_update: schemas.RestauranteUpdate, db: Session = Depends(get_db)):
     """Atualiza as informações de um restaurante existente."""
-    db_restaurante = crud.update_restaurante(db, restaurante_id=restaurante_id, restaurante_update=restaurante_update)
-    if db_restaurante is None:
-        raise HTTPException(status_code=404, detail="Restaurante não encontrado")
-    return db_restaurante
+    try:
+        # Validação adicional
+        if restaurante_update.taxa_entrega is not None and restaurante_update.taxa_entrega < 0:
+            raise HTTPException(
+                status_code=400,
+                detail="Taxa de entrega não pode ser negativa"
+            )
+        
+        db_restaurante = crud.update_restaurante(db, restaurante_id=restaurante_id, restaurante_update=restaurante_update)
+        if db_restaurante is None:
+            raise HTTPException(status_code=404, detail="Restaurante não encontrado")
+        return db_restaurante
+        
+    except ValidationError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Erro ao atualizar restaurante: {str(e)}"
+        )
 
 @app.delete(
     "/restaurantes/{restaurante_id}", 
@@ -302,10 +400,19 @@ def atualizar_restaurante(restaurante_id: uuid.UUID, restaurante_update: schemas
 )
 def deletar_restaurante(restaurante_id: uuid.UUID, db: Session = Depends(get_db)):
     """Deleta um restaurante do banco de dados. Esta operação é irreversível."""
-    db_restaurante = crud.delete_restaurante(db, restaurante_id=restaurante_id)
-    if db_restaurante is None:
-        raise HTTPException(status_code=404, detail="Restaurante não encontrado")
-    return {"message": "Restaurante deletado com sucesso"}
+    try:
+        db_restaurante = crud.delete_restaurante(db, restaurante_id=restaurante_id)
+        if db_restaurante is None:
+            raise HTTPException(status_code=404, detail="Restaurante não encontrado")
+        return None  # 204 No Content
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Erro ao deletar restaurante: {str(e)}"
+        )
 
 # CATEGORIAS
 @app.post(
@@ -317,7 +424,15 @@ def deletar_restaurante(restaurante_id: uuid.UUID, db: Session = Depends(get_db)
 )
 def criar_categoria(categoria: schemas.CategoriaCreate, db: Session = Depends(get_db)):
     """Cria uma nova categoria de produtos (ex: Pizzas, Bebidas)."""
-    return crud.create_categoria(db=db, categoria=categoria)
+    try:
+        return crud.create_categoria(db=db, categoria=categoria)
+    except ValidationError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Erro interno ao criar categoria: {str(e)}"
+        )
 
 @app.get(
     "/categorias/", 
@@ -326,13 +441,19 @@ def criar_categoria(categoria: schemas.CategoriaCreate, db: Session = Depends(ge
     tags=["Categorias"]
 )
 def listar_categorias(
-    skip: int = Query(0, description="Número de itens a pular (offset)"), 
-    limit: int = Query(100, description="Número máximo de itens a retornar"), 
+    skip: int = Query(0, ge=0, description="Número de itens a pular (offset)"), 
+    limit: int = Query(100, ge=1, le=1000, description="Número máximo de itens a retornar"), 
     db: Session = Depends(get_db)
 ):
     """Retorna uma lista de todas as categorias de produtos cadastradas."""
-    categorias = crud.get_categorias(db, skip=skip, limit=limit)
-    return categorias
+    try:
+        categorias = crud.get_categorias(db, skip=skip, limit=limit)
+        return categorias
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Erro ao listar categorias: {str(e)}"
+        )
 
 # PRODUTOS
 @app.post(
@@ -344,7 +465,25 @@ def listar_categorias(
 )
 def criar_produto(produto: schemas.ProdutoCreate, db: Session = Depends(get_db)):
     """Cria um novo produto associado a um restaurante e categoria."""
-    return crud.create_produto(db=db, produto=produto)
+    try:
+        # Validação adicional
+        if produto.preco <= 0:
+            raise HTTPException(
+                status_code=400,
+                detail="Preço do produto deve ser maior que zero"
+            )
+        
+        return crud.create_produto(db=db, produto=produto)
+        
+    except ValidationError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Erro interno ao criar produto: {str(e)}"
+        )
 
 @app.get(
     "/produtos/restaurante/{restaurante_id}", 
@@ -354,13 +493,19 @@ def criar_produto(produto: schemas.ProdutoCreate, db: Session = Depends(get_db))
 )
 def listar_produtos_restaurante(
     restaurante_id: uuid.UUID, 
-    skip: int = Query(0, description="Número de itens a pular (offset)"), 
-    limit: int = Query(100, description="Número máximo de itens a retornar"), 
+    skip: int = Query(0, ge=0, description="Número de itens a pular (offset)"), 
+    limit: int = Query(100, ge=1, le=1000, description="Número máximo de itens a retornar"), 
     db: Session = Depends(get_db)
 ):
     """Retorna todos os produtos de um restaurante específico."""
-    produtos = crud.get_produtos_by_restaurante(db, restaurante_id=restaurante_id, skip=skip, limit=limit)
-    return produtos
+    try:
+        produtos = crud.get_produtos_by_restaurante(db, restaurante_id=restaurante_id, skip=skip, limit=limit)
+        return produtos
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Erro ao listar produtos do restaurante: {str(e)}"
+        )
 
 @app.get(
     "/produtos/{produto_id}", 
@@ -370,10 +515,18 @@ def listar_produtos_restaurante(
 )
 def obter_produto(produto_id: uuid.UUID, db: Session = Depends(get_db)):
     """Retorna os detalhes de um produto específico pelo seu ID."""
-    db_produto = crud.get_produto(db, produto_id=produto_id)
-    if db_produto is None:
-        raise HTTPException(status_code=404, detail="Produto não encontrado")
-    return db_produto
+    try:
+        db_produto = crud.get_produto(db, produto_id=produto_id)
+        if db_produto is None:
+            raise HTTPException(status_code=404, detail="Produto não encontrado")
+        return db_produto
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Erro ao obter produto: {str(e)}"
+        )
 
 @app.put(
     "/produtos/{produto_id}", 
@@ -383,10 +536,28 @@ def obter_produto(produto_id: uuid.UUID, db: Session = Depends(get_db)):
 )
 def atualizar_produto(produto_id: uuid.UUID, produto_update: schemas.ProdutoUpdate, db: Session = Depends(get_db)):
     """Atualiza as informações de um produto existente."""
-    db_produto = crud.update_produto(db, produto_id=produto_id, produto_update=produto_update)
-    if db_produto is None:
-        raise HTTPException(status_code=404, detail="Produto não encontrado")
-    return db_produto
+    try:
+        # Validação adicional
+        if produto_update.preco is not None and produto_update.preco <= 0:
+            raise HTTPException(
+                status_code=400,
+                detail="Preço do produto deve ser maior que zero"
+            )
+        
+        db_produto = crud.update_produto(db, produto_id=produto_id, produto_update=produto_update)
+        if db_produto is None:
+            raise HTTPException(status_code=404, detail="Produto não encontrado")
+        return db_produto
+        
+    except ValidationError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Erro ao atualizar produto: {str(e)}"
+        )
 
 @app.delete(
     "/produtos/{produto_id}", 
@@ -396,10 +567,19 @@ def atualizar_produto(produto_id: uuid.UUID, produto_update: schemas.ProdutoUpda
 )
 def deletar_produto(produto_id: uuid.UUID, db: Session = Depends(get_db)):
     """Deleta um produto do banco de dados. Esta operação é irreversível."""
-    db_produto = crud.delete_produto(db, produto_id=produto_id)
-    if db_produto is None:
-        raise HTTPException(status_code=404, detail="Produto não encontrado")
-    return {"message": "Produto deletado com sucesso"}
+    try:
+        db_produto = crud.delete_produto(db, produto_id=produto_id)
+        if db_produto is None:
+            raise HTTPException(status_code=404, detail="Produto não encontrado")
+        return None  # 204 No Content
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Erro ao deletar produto: {str(e)}"
+        )
 
 if __name__ == "__main__":
     import uvicorn
