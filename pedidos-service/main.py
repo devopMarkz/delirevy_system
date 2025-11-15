@@ -51,7 +51,43 @@ def escutar_eventos_pagamentos():
                     try:
                         evento = json.loads(message['data'])
                         
-                        if evento.get('tipo') == 'PAGAMENTO_PROCESSADO':
+                        # 🔥 ADICIONADO: TRATAMENTO PARA EVENTOS DE ESTORNO
+                        if evento.get('tipo') == 'ESTORNO_PROCESSADO':
+                            pedido_id = evento['pedido_id']
+                            pagamento_id = evento['pagamento_id']
+                            motivo = evento.get('motivo', 'Estorno solicitado')
+                            
+                            print(f"💸 EVENTO ESTORNO RECEBIDO:")
+                            print(f"   📦 Pedido: {pedido_id}")
+                            print(f"   💰 Pagamento: {pagamento_id}")
+                            print(f"   📝 Motivo: {motivo}")
+                            
+                            # ATUALIZAR STATUS DO PEDIDO PARA CANCELADO
+                            db = SessionLocal()
+                            try:
+                                pedido_atualizado = crud.update_pedido_status(db, uuid.UUID(pedido_id), "CANCELADO")
+                                if pedido_atualizado:
+                                    print(f"   ❌ Pedido {pedido_id} cancelado devido a estorno")
+                                    
+                                    # Publicar evento de cancelamento
+                                    evento_status = {
+                                        "tipo": "PEDIDO_STATUS_ATUALIZADO",
+                                        "pedido_id": pedido_id,
+                                        "status": "CANCELADO",
+                                        "restaurante_id": str(pedido_atualizado.restaurante_id),
+                                        "motivo": f"Estorno processado: {motivo}"
+                                    }
+                                    publicar_evento("pedidos", evento_status)
+                                    
+                                else:
+                                    print(f"   ⚠️  Pedido {pedido_id} não encontrado para cancelamento")
+                                    
+                            except Exception as e:
+                                print(f"   ❌ Erro ao cancelar pedido por estorno: {e}")
+                            finally:
+                                db.close()
+                        
+                        elif evento.get('tipo') == 'PAGAMENTO_PROCESSADO':
                             pedido_id = evento['pedido_id']
                             status_pagamento = evento['status']
                             pagamento_id = evento['pagamento_id']

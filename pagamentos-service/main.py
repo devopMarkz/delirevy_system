@@ -364,6 +364,11 @@ def criar_estorno(estorno: schemas.EstornoCreate, db: Session = Depends(get_db))
                 detail="Valor do estorno não pode ser maior que o valor do pagamento"
             )
         
+        # 🔥 CORREÇÃO: ATUALIZAR STATUS DO PAGAMENTO PARA ESTORNADO
+        pagamento_update = schemas.PagamentoUpdate(status="ESTORNADO")
+        pagamento_atualizado = crud.update_pagamento(db, pagamento_id=estorno.pagamento_id, pagamento_update=pagamento_update)
+        
+        # Criar o estorno
         db_estorno = crud.create_estorno(db=db, estorno=estorno)
         
         # Publicar evento de estorno (para notificar outros serviços, como o de pedidos)
@@ -371,9 +376,13 @@ def criar_estorno(estorno: schemas.EstornoCreate, db: Session = Depends(get_db))
             "tipo": "ESTORNO_PROCESSADO",
             "estorno_id": str(db_estorno.id),
             "pagamento_id": str(db_estorno.pagamento_id),
-            "valor_estornado": db_estorno.valor_estornado
+            "pedido_id": str(pagamento.pedido_id),
+            "valor_estornado": db_estorno.valor_estornado,
+            "motivo": db_estorno.motivo
         }
         publicar_evento("pagamentos", evento_estorno)
+        
+        print(f"💰 Estorno criado para pagamento {estorno.pagamento_id}")
         
         return db_estorno
         
