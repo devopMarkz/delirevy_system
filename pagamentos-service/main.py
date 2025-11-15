@@ -13,6 +13,7 @@ from typing import List
 from contextlib import asynccontextmanager
 from datetime import datetime
 from pydantic import ValidationError
+from fastapi.responses import Response
 
 # Criar tabelas
 models.Base.metadata.create_all(bind=engine)
@@ -178,7 +179,6 @@ def root():
 # PAGAMENTOS
 @app.post(
     "/pagamentos/", 
-    response_model=schemas.Pagamento, 
     summary="Criar Pagamento", 
     tags=["Pagamentos"],
     status_code=status.HTTP_201_CREATED
@@ -191,6 +191,8 @@ async def criar_pagamento(
     """
     Cria um novo registro de pagamento e inicia o processamento assíncrono.
     O processamento simula a comunicação com um gateway externo e publica o evento 'PAGAMENTO_PROCESSADO'.
+    
+    Retorna: 201 Created com header Location apontando para o recurso criado
     """
     try:
         # Validações adicionais
@@ -220,7 +222,11 @@ async def criar_pagamento(
         # Processar pagamento em background
         background_tasks.add_task(processar_pagamento_em_background, db_pagamento.id)
         
-        return db_pagamento
+        # RETORNO CORRETO: 201 Created com Location header
+        return Response(
+            status_code=status.HTTP_201_CREATED,
+            headers={"Location": f"/pagamentos/{db_pagamento.id}"}
+        )
         
     except ValidationError as e:
         raise HTTPException(status_code=422, detail=str(e))
@@ -286,14 +292,16 @@ def obter_pagamento_por_pedido(pedido_id: uuid.UUID, db: Session = Depends(get_d
 
 @app.put(
     "/pagamentos/{pagamento_id}", 
-    response_model=schemas.Pagamento, 
     summary="Atualizar Pagamento", 
-    tags=["Pagamentos"]
+    tags=["Pagamentos"],
+    status_code=status.HTTP_204_NO_CONTENT
 )
 def atualizar_pagamento(pagamento_id: uuid.UUID, pagamento_update: schemas.PagamentoUpdate, db: Session = Depends(get_db)):
     """
     Atualiza o status ou informações de transação de um pagamento existente.
     Publica o evento 'PAGAMENTO_PROCESSADO' com o novo status.
+    
+    Retorna: 204 No Content sem body
     """
     try:
         # Validações de status
@@ -310,7 +318,8 @@ def atualizar_pagamento(pagamento_id: uuid.UUID, pagamento_update: schemas.Pagam
         # Publicar evento de pagamento processado com o novo status
         publicar_evento_pagamento(db_pagamento.id, db_pagamento.pedido_id, db_pagamento.status)
         
-        return db_pagamento
+        # RETORNO CORRETO: 204 No Content sem body
+        return Response(status_code=status.HTTP_204_NO_CONTENT)
         
     except HTTPException:
         raise
@@ -329,7 +338,9 @@ def deletar_pagamento(pagamento_id: uuid.UUID, db: Session = Depends(get_db)):
         db_pagamento = crud.delete_pagamento(db, pagamento_id=pagamento_id)
         if db_pagamento is None:
             raise HTTPException(status_code=404, detail="Pagamento não encontrado")
-        return None  # 204 No Content
+        
+        return Response(status_code=status.HTTP_204_NO_CONTENT)  # 204 No Content
+        
     except HTTPException:
         raise
     except Exception as e:
@@ -338,7 +349,6 @@ def deletar_pagamento(pagamento_id: uuid.UUID, db: Session = Depends(get_db)):
 # ESTORNOS
 @app.post(
     "/estornos/", 
-    response_model=schemas.Estorno, 
     summary="Criar Estorno", 
     tags=["Estornos"],
     status_code=status.HTTP_201_CREATED
@@ -347,6 +357,8 @@ def criar_estorno(estorno: schemas.EstornoCreate, db: Session = Depends(get_db))
     """
     Cria um novo registro de estorno para um pagamento. 
     Publica o evento 'ESTORNO_PROCESSADO' no Redis.
+    
+    Retorna: 201 Created com header Location apontando para o recurso criado
     """
     try:
         # Verificar se o pagamento existe
@@ -384,7 +396,11 @@ def criar_estorno(estorno: schemas.EstornoCreate, db: Session = Depends(get_db))
         
         print(f"💰 Estorno criado para pagamento {estorno.pagamento_id}")
         
-        return db_estorno
+        # RETORNO CORRETO: 201 Created com Location header
+        return Response(
+            status_code=status.HTTP_201_CREATED,
+            headers={"Location": f"/estornos/{db_estorno.id}"}
+        )
         
     except HTTPException:
         raise

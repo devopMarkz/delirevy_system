@@ -12,6 +12,7 @@ from typing import List
 from contextlib import asynccontextmanager
 from datetime import datetime
 from pydantic import ValidationError
+from fastapi.responses import Response
 
 # Criar tabelas
 models.Base.metadata.create_all(bind=engine)
@@ -242,7 +243,6 @@ def root():
 # PEDIDOS
 @app.post(
     "/pedidos/", 
-    response_model=schemas.Pedido, 
     summary="Criar Novo Pedido", 
     tags=["Pedidos"],
     status_code=status.HTTP_201_CREATED
@@ -252,6 +252,8 @@ def criar_pedido(pedido: schemas.PedidoCreate, db: Session = Depends(get_db)):
     Cria um novo pedido no sistema. 
     Realiza a validação do endereço de entrega via API externa (ViaCEP).
     Após a criação, publica o evento 'PEDIDO_CRIADO' no Redis.
+    
+    Retorna: 201 Created com header Location apontando para o recurso criado
     """
     try:
         # Validações básicas dos dados
@@ -324,7 +326,11 @@ def criar_pedido(pedido: schemas.PedidoCreate, db: Session = Depends(get_db)):
         
         print(f"📦 Pedido {db_pedido.id} criado e evento publicado!")
         
-        return db_pedido
+        # RETORNO CORRETO: 201 Created com Location header
+        return Response(
+            status_code=status.HTTP_201_CREATED,
+            headers={"Location": f"/pedidos/{db_pedido.id}"}
+        )
         
     except ValidationError as e:
         raise HTTPException(status_code=422, detail=str(e))
@@ -424,9 +430,9 @@ def listar_pedidos_restaurante(
 
 @app.put(
     "/pedidos/{pedido_id}/status", 
-    response_model=schemas.Pedido, 
     summary="Atualizar Status do Pedido", 
-    tags=["Pedidos"]
+    tags=["Pedidos"],
+    status_code=status.HTTP_204_NO_CONTENT
 )
 def atualizar_status_pedido(
     pedido_id: uuid.UUID, 
@@ -436,6 +442,8 @@ def atualizar_status_pedido(
     """
     Atualiza o status de um pedido. 
     Publica o evento 'PEDIDO_STATUS_ATUALIZADO' no Redis.
+    
+    Retorna: 204 No Content sem body
     """
     try:
         # Validação do status
@@ -462,7 +470,8 @@ def atualizar_status_pedido(
         
         print(f"🔄 Status do pedido {pedido_id} atualizado para: {status}")
         
-        return db_pedido
+        # RETORNO CORRETO: 204 No Content sem body
+        return Response(status_code=status.HTTP_204_NO_CONTENT)
         
     except HTTPException:
         raise
@@ -492,7 +501,7 @@ def deletar_pedido(pedido_id: uuid.UUID, db: Session = Depends(get_db)):
         }
         publicar_evento("pedidos", evento)
         
-        return None  # 204 No Content
+        return Response(status_code=status.HTTP_204_NO_CONTENT)  # 204 No Content
         
     except HTTPException:
         raise

@@ -13,6 +13,7 @@ from sendgrid import SendGridAPIClient
 from sendgrid.helpers.mail import Mail
 from typing import List
 from pydantic import ValidationError
+from fastapi.responses import Response
 
 # Criar tabelas
 models.Base.metadata.create_all(bind=engine)
@@ -285,13 +286,16 @@ def root():
 # RESTAURANTES
 @app.post(
     "/restaurantes/", 
-    response_model=schemas.Restaurante, 
     summary="Criar Restaurante", 
     tags=["Restaurantes"],
     status_code=status.HTTP_201_CREATED
 )
 def criar_restaurante(restaurante: schemas.RestauranteCreate, db: Session = Depends(get_db)):
-    """Cria um novo restaurante no banco de dados. Requer um CNPJ único."""
+    """
+    Cria um novo restaurante no banco de dados. Requer um CNPJ único.
+    
+    Retorna: 201 Created com header Location apontando para o recurso criado
+    """
     try:
         # Validação adicional
         if restaurante.taxa_entrega < 0:
@@ -306,7 +310,14 @@ def criar_restaurante(restaurante: schemas.RestauranteCreate, db: Session = Depe
                 status_code=400, 
                 detail="CNPJ já cadastrado"
             )
-        return crud.create_restaurante(db=db, restaurante=restaurante)
+        
+        db_restaurante = crud.create_restaurante(db=db, restaurante=restaurante)
+        
+        # RETORNO CORRETO: 201 Created com Location header
+        return Response(
+            status_code=status.HTTP_201_CREATED,
+            headers={"Location": f"/restaurantes/{db_restaurante.id}"}
+        )
         
     except ValidationError as e:
         raise HTTPException(status_code=422, detail=str(e))
@@ -363,12 +374,16 @@ def obter_restaurante(restaurante_id: uuid.UUID, db: Session = Depends(get_db)):
 
 @app.put(
     "/restaurantes/{restaurante_id}", 
-    response_model=schemas.Restaurante, 
     summary="Atualizar Restaurante", 
-    tags=["Restaurantes"]
+    tags=["Restaurantes"],
+    status_code=status.HTTP_204_NO_CONTENT
 )
 def atualizar_restaurante(restaurante_id: uuid.UUID, restaurante_update: schemas.RestauranteUpdate, db: Session = Depends(get_db)):
-    """Atualiza as informações de um restaurante existente."""
+    """
+    Atualiza as informações de um restaurante existente.
+    
+    Retorna: 204 No Content sem body
+    """
     try:
         # Validação adicional
         if restaurante_update.taxa_entrega is not None and restaurante_update.taxa_entrega < 0:
@@ -380,7 +395,9 @@ def atualizar_restaurante(restaurante_id: uuid.UUID, restaurante_update: schemas
         db_restaurante = crud.update_restaurante(db, restaurante_id=restaurante_id, restaurante_update=restaurante_update)
         if db_restaurante is None:
             raise HTTPException(status_code=404, detail="Restaurante não encontrado")
-        return db_restaurante
+        
+        # RETORNO CORRETO: 204 No Content sem body
+        return Response(status_code=status.HTTP_204_NO_CONTENT)
         
     except ValidationError as e:
         raise HTTPException(status_code=422, detail=str(e))
@@ -404,7 +421,8 @@ def deletar_restaurante(restaurante_id: uuid.UUID, db: Session = Depends(get_db)
         db_restaurante = crud.delete_restaurante(db, restaurante_id=restaurante_id)
         if db_restaurante is None:
             raise HTTPException(status_code=404, detail="Restaurante não encontrado")
-        return None  # 204 No Content
+        
+        return Response(status_code=status.HTTP_204_NO_CONTENT)  # 204 No Content
         
     except HTTPException:
         raise
@@ -417,15 +435,25 @@ def deletar_restaurante(restaurante_id: uuid.UUID, db: Session = Depends(get_db)
 # CATEGORIAS
 @app.post(
     "/categorias/", 
-    response_model=schemas.Categoria, 
     summary="Criar Categoria", 
     tags=["Categorias"],
     status_code=status.HTTP_201_CREATED
 )
 def criar_categoria(categoria: schemas.CategoriaCreate, db: Session = Depends(get_db)):
-    """Cria uma nova categoria de produtos (ex: Pizzas, Bebidas)."""
+    """
+    Cria uma nova categoria de produtos (ex: Pizzas, Bebidas).
+    
+    Retorna: 201 Created com header Location apontando para o recurso criado
+    """
     try:
-        return crud.create_categoria(db=db, categoria=categoria)
+        db_categoria = crud.create_categoria(db=db, categoria=categoria)
+        
+        # RETORNO CORRETO: 201 Created com Location header
+        return Response(
+            status_code=status.HTTP_201_CREATED,
+            headers={"Location": f"/categorias/{db_categoria.id}"}
+        )
+        
     except ValidationError as e:
         raise HTTPException(status_code=422, detail=str(e))
     except Exception as e:
@@ -458,13 +486,16 @@ def listar_categorias(
 # PRODUTOS
 @app.post(
     "/produtos/", 
-    response_model=schemas.Produto, 
     summary="Criar Produto", 
     tags=["Produtos"],
     status_code=status.HTTP_201_CREATED
 )
 def criar_produto(produto: schemas.ProdutoCreate, db: Session = Depends(get_db)):
-    """Cria um novo produto associado a um restaurante e categoria."""
+    """
+    Cria um novo produto associado a um restaurante e categoria.
+    
+    Retorna: 201 Created com header Location apontando para o recurso criado
+    """
     try:
         # Validação adicional
         if produto.preco <= 0:
@@ -473,7 +504,13 @@ def criar_produto(produto: schemas.ProdutoCreate, db: Session = Depends(get_db))
                 detail="Preço do produto deve ser maior que zero"
             )
         
-        return crud.create_produto(db=db, produto=produto)
+        db_produto = crud.create_produto(db=db, produto=produto)
+        
+        # RETORNO CORRETO: 201 Created com Location header
+        return Response(
+            status_code=status.HTTP_201_CREATED,
+            headers={"Location": f"/produtos/{db_produto.id}"}
+        )
         
     except ValidationError as e:
         raise HTTPException(status_code=422, detail=str(e))
@@ -530,12 +567,16 @@ def obter_produto(produto_id: uuid.UUID, db: Session = Depends(get_db)):
 
 @app.put(
     "/produtos/{produto_id}", 
-    response_model=schemas.Produto, 
     summary="Atualizar Produto", 
-    tags=["Produtos"]
+    tags=["Produtos"],
+    status_code=status.HTTP_204_NO_CONTENT
 )
 def atualizar_produto(produto_id: uuid.UUID, produto_update: schemas.ProdutoUpdate, db: Session = Depends(get_db)):
-    """Atualiza as informações de um produto existente."""
+    """
+    Atualiza as informações de um produto existente.
+    
+    Retorna: 204 No Content sem body
+    """
     try:
         # Validação adicional
         if produto_update.preco is not None and produto_update.preco <= 0:
@@ -547,7 +588,9 @@ def atualizar_produto(produto_id: uuid.UUID, produto_update: schemas.ProdutoUpda
         db_produto = crud.update_produto(db, produto_id=produto_id, produto_update=produto_update)
         if db_produto is None:
             raise HTTPException(status_code=404, detail="Produto não encontrado")
-        return db_produto
+        
+        # RETORNO CORRETO: 204 No Content sem body
+        return Response(status_code=status.HTTP_204_NO_CONTENT)
         
     except ValidationError as e:
         raise HTTPException(status_code=422, detail=str(e))
@@ -571,7 +614,8 @@ def deletar_produto(produto_id: uuid.UUID, db: Session = Depends(get_db)):
         db_produto = crud.delete_produto(db, produto_id=produto_id)
         if db_produto is None:
             raise HTTPException(status_code=404, detail="Produto não encontrado")
-        return None  # 204 No Content
+        
+        return Response(status_code=status.HTTP_204_NO_CONTENT)  # 204 No Content
         
     except HTTPException:
         raise
