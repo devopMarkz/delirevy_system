@@ -11,7 +11,6 @@ app = FastAPI(
     version="1.0.0"
 )
 
-# CORS
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -20,24 +19,17 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# URLs dos serviços
 PEDIDOS_SERVICE_URL = os.getenv("PEDIDOS_SERVICE_URL", "http://pedidos-service:8001")
 RESTAURANTES_SERVICE_URL = os.getenv("RESTAURANTES_SERVICE_URL", "http://restaurantes-service:8002")
 PAGAMENTOS_SERVICE_URL = os.getenv("PAGAMENTOS_SERVICE_URL", "http://pagamentos-service:8003")
 
-# Função auxiliar para fazer requisições com tratamento correto de erros
 def make_service_request(method: str, url: str, **kwargs):
-    """
-    Faz requisição para serviços e propaga corretamente os status codes
-    """
     try:
         response = requests.request(method, url, **kwargs)
         
-        # Se for sucesso (2xx), retorna a resposta completa
         if 200 <= response.status_code < 300:
             return response
         
-        # Propaga erros específicos do serviço
         if response.status_code == 400:
             raise HTTPException(status_code=400, detail=response.json().get('detail', 'Bad Request'))
         elif response.status_code == 404:
@@ -45,7 +37,6 @@ def make_service_request(method: str, url: str, **kwargs):
         elif response.status_code == 422:
             raise HTTPException(status_code=422, detail=response.json().get('detail', 'Validation Error'))
         else:
-            # Para outros códigos de erro, propaga com a mensagem original
             error_detail = response.json().get('detail', f'Service error: {response.status_code}')
             raise HTTPException(status_code=response.status_code, detail=error_detail)
             

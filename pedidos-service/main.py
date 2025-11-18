@@ -14,19 +14,133 @@ from datetime import datetime
 from pydantic import ValidationError
 from fastapi.responses import Response
 
-# Criar tabelas
 models.Base.metadata.create_all(bind=engine)
 
-# 🔥 VARIÁVEIS GLOBAIS PARA CONTROLE DO LISTENER
 listener_thread = None
 listener_stop_event = threading.Event()
 
-# Redis
 redis_client = redis.Redis(host='redis', port=6379, decode_responses=True)
 
-# Função para publicar evento
+RESTAURANTES_SERVICE_URL = "http://restaurantes-service:8002"
+
+def buscar_produto_no_restaurante_service(produto_id: uuid.UUID):
+    try:
+        response = requests.get(
+            f"{RESTAURANTES_SERVICE_URL}/produtos/{produto_id}",
+            timeout=10
+        )
+        
+        if response.status_code == 200:
+            return response.json()
+        elif response.status_code == 404:
+            return None
+        else:
+            error_detail = response.json().get('detail', f'Erro ao buscar produto: {response.status_code}')
+            raise HTTPException(status_code=response.status_code, detail=error_detail)
+            
+    except requests.exceptions.Timeout:
+        raise HTTPException(status_code=504, detail="Timeout ao buscar produto no serviço de restaurantes")
+    except requests.exceptions.ConnectionError:
+        raise HTTPException(status_code=503, detail="Serviço de restaurantes indisponível")
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Erro interno ao buscar produto: {str(e)}")
+
+def buscar_restaurante_no_restaurante_service(restaurante_id: uuid.UUID):
+    try:
+        response = requests.get(
+            f"{RESTAURANTES_SERVICE_URL}/restaurantes/{restaurante_id}",
+            timeout=10
+        )
+        
+        if response.status_code == 200:
+            return response.json()
+        elif response.status_code == 404:
+            return None
+        else:
+            error_detail = response.json().get('detail', f'Erro ao buscar restaurante: {response.status_code}')
+            raise HTTPException(status_code=response.status_code, detail=error_detail)
+            
+    except requests.exceptions.Timeout:
+        raise HTTPException(status_code=504, detail="Timeout ao buscar restaurante no serviço de restaurantes")
+    except requests.exceptions.ConnectionError:
+        raise HTTPException(status_code=503, detail="Serviço de restaurantes indisponível")
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Erro interno ao buscar restaurante: {str(e)}")
+
+# Função para validar se o produto pertence ao restaurante
+def validar_produto_pertence_ao_restaurante(produto: dict, restaurante_id: uuid.UUID):
+    produto_restaurante_id = produto.get('restaurante_id')
+    
+    if not produto_restaurante_id:
+        raise HTTPException(
+            status_code=500,
+            detail="Produto não possui restaurante_id associado"
+        )
+    
+    if str(produto_restaurante_id) != str(restaurante_id):
+        raise HTTPException(
+            status_code=400,
+            detail=f"Produto {produto.get('nome', 'Unknown')} não pertence ao restaurante especificado"
+        )
+
+# Validar e completar todos os dados do pedido
+def validar_e_completar_dados_pedido(pedido_simplificado: schemas.PedidoCreateSimplificado):
+    print(f"Validando restaurante: {pedido_simplificado.restaurante_id}")
+    
+    restaurante = buscar_restaurante_no_restaurante_service(pedido_simplificado.restaurante_id)
+    
+    if not restaurante:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Restaurante não encontrado: {pedido_simplificado.restaurante_id}"
+        )
+    
+    if not restaurante.get('ativo', True):
+        raise HTTPException(
+            status_code=400,
+            detail=f"Restaurante não está ativo: {restaurante.get('nome', 'Unknown')}"
+        )
+    
+    print(f"Restaurante validado: {restaurante.get('nome', 'Unknown')}")
+    
+    itens_completos = []
+    
+    for item_simplificado in pedido_simplificado.itens:
+        print(f"Validando produto: {item_simplificado.produto_id}")
+        
+        produto = buscar_produto_no_restaurante_service(item_simplificado.produto_id)
+        
+        if not produto:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Produto não encontrado: {item_simplificado.produto_id}"
+            )
+        
+        if not produto.get('disponivel', True):
+            raise HTTPException(
+                status_code=400,
+                detail=f"Produto não disponível: {produto.get('nome', 'Unknown')}"
+            )
+        
+        validar_produto_pertence_ao_restaurante(produto, pedido_simplificado.restaurante_id)
+        
+        item_completo = schemas.ItemPedidoCreate(
+            produto_id=item_simplificado.produto_id,
+            produto_nome=produto['nome'],
+            quantidade=item_simplificado.quantidade,
+            preco_unitario=produto['preco']
+        )
+        
+        itens_completos.append(item_completo)
+        print(f"Produto validado: {produto['nome']} - R$ {produto['preco']}")
+    
+    return itens_completos, restaurante
+
 def publicar_evento(channel: str, evento: dict):
-    """Publica um evento no canal Redis especificado."""
     try:
         evento['timestamp'] = str(datetime.now())
         redis_client.publish(channel, json.dumps(evento))
@@ -52,7 +166,6 @@ def escutar_eventos_pagamentos():
                     try:
                         evento = json.loads(message['data'])
                         
-                        # 🔥 ADICIONADO: TRATAMENTO PARA EVENTOS DE ESTORNO
                         if evento.get('tipo') == 'ESTORNO_PROCESSADO':
                             pedido_id = evento['pedido_id']
                             pagamento_id = evento['pagamento_id']
@@ -146,38 +259,33 @@ def escutar_eventos_pagamentos():
                     except Exception as e:
                         print(f"❌ Erro ao processar evento de pagamento: {e}")
                 
-                # Pequena pausa para não sobrecarregar a CPU
                 time.sleep(0.1)
                         
         except Exception as e:
             if not listener_stop_event.is_set():
                 print(f"❌ Erro no listener, reconectando...: {e}")
-                time.sleep(2)  # Espera antes de reconectar
+                time.sleep(2)
     
     print("🛑 Listener de eventos de pagamentos parado.")
 
-# 🔥 LIFESPAN MODERNO (substitui o on_event deprecated)
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Startup
-    print("🚀 Pedidos Service: Iniciando servidor...")
+    print("Pedidos Service: Iniciando servidor...")
     
-    # Iniciar o listener do Redis
     listener_stop_event.clear()
     listener_thread = threading.Thread(target=escutar_eventos_pagamentos)
     listener_thread.daemon = True
     listener_thread.start()
-    print("✅ Listener de eventos de pagamentos iniciado automaticamente!")
+    print("Listener de eventos de pagamentos iniciado automaticamente!")
     
-    yield  # Aqui o app está rodando
+    yield
     
-    # Shutdown
-    print("🛑 Pedidos Service: Parando servidor...")
+    print("Pedidos Service: Parando servidor...")
     listener_stop_event.set()
     
     if listener_thread and listener_thread.is_alive():
         listener_thread.join(timeout=5)
-        print("✅ Listener de eventos de pagamentos parado corretamente.")
+        print("Listener de eventos de pagamentos parado corretamente.")
 
 # Criar app com lifespan
 app = FastAPI(
@@ -192,25 +300,21 @@ app = FastAPI(
     ]
 )
 
-# FUNÇÃO PARA INTEGRAÇÃO COM API EXTERNA VIAcep
 def validar_e_completar_endereco(cep: str) -> dict:
     """
     Integração com API externa ViaCEP para validar e completar endereço
     """
     try:
-        # Remove caracteres não numéricos do CEP
         cep_limpo = ''.join(filter(str.isdigit, cep))
         
         if len(cep_limpo) != 8:
             return {"valido": False, "erro": "CEP deve ter 8 dígitos"}
         
-        # Chamada para API externa ViaCEP
         response = requests.get(f"https://viacep.com.br/ws/{cep_limpo}/json/", timeout=10)
         
         if response.status_code == 200:
             dados = response.json()
             
-            # Verifica se o CEP existe
             if 'erro' not in dados:
                 return {
                     "valido": True,
@@ -237,7 +341,6 @@ def validar_e_completar_endereco(cep: str) -> dict:
 
 @app.get("/", summary="Status do Serviço", tags=["Interno"])
 def root():
-    """Retorna o status do serviço de pedidos."""
     return {"message": "Pedidos Service está online"}
 
 # PEDIDOS
@@ -247,33 +350,28 @@ def root():
     tags=["Pedidos"],
     status_code=status.HTTP_201_CREATED
 )
-def criar_pedido(pedido: schemas.PedidoCreate, db: Session = Depends(get_db)):
+def criar_pedido(pedido: schemas.PedidoCreateSimplificado, db: Session = Depends(get_db)):
     """
     Cria um novo pedido no sistema. 
     Realiza a validação do endereço de entrega via API externa (ViaCEP).
+    Busca automaticamente nome e preço dos produtos no serviço de restaurantes.
+    Valida se restaurante existe e se produtos pertencem ao restaurante.
     Após a criação, publica o evento 'PEDIDO_CRIADO' no Redis.
-    
-    Retorna: 201 Created com header Location apontando para o recurso criado
     """
     try:
-        # Validações básicas dos dados
         if not pedido.itens or len(pedido.itens) == 0:
             raise HTTPException(
                 status_code=400,
                 detail="Pedido deve conter pelo menos um item"
             )
         
-        for item in pedido.itens:
-            if item.quantidade <= 0:
-                raise HTTPException(
-                    status_code=400,
-                    detail="Quantidade do item deve ser maior que zero"
-                )
-            if item.preco_unitario <= 0:
-                raise HTTPException(
-                    status_code=400,
-                    detail="Preço unitário do item deve ser maior que zero"
-                )
+        print(f"🔄 Validando restaurante e {len(pedido.itens)} itens do pedido...")
+        itens_completos, restaurante = validar_e_completar_dados_pedido(pedido)
+        
+        print(f"✅ Todos os dados validados com sucesso!")
+        print(f"   🏠 Restaurante: {restaurante.get('nome', 'Unknown')}")
+        for item in itens_completos:
+            print(f"   🍕 {item.produto_nome} - R$ {item.preco_unitario} x {item.quantidade}")
         
         # VALIDAÇÃO DO CEP COM API EXTERNA VIAcep
         cep = pedido.endereco_entrega.cep
@@ -299,18 +397,16 @@ def criar_pedido(pedido: schemas.PedidoCreate, db: Session = Depends(get_db)):
         if not endereco_atualizado.get('estado') and dados_api.get('estado'):
             endereco_atualizado['estado'] = dados_api['estado']
         
-        # Atualiza o CEP formatado
         endereco_atualizado['cep'] = dados_api['cep']
         
-        # Cria o pedido com endereço validado
-        pedido_validado = schemas.PedidoCreate(
+        pedido_completo = schemas.PedidoCreate(
             cliente_id=pedido.cliente_id,
             restaurante_id=pedido.restaurante_id,
-            itens=pedido.itens,
+            itens=itens_completos,
             endereco_entrega=schemas.EnderecoEntrega(**endereco_atualizado)
         )
         
-        db_pedido = crud.create_pedido(db=db, pedido=pedido_validado)
+        db_pedido = crud.create_pedido(db=db, pedido=pedido_completo)
         
         # Publicar evento
         evento = {
@@ -318,15 +414,16 @@ def criar_pedido(pedido: schemas.PedidoCreate, db: Session = Depends(get_db)):
             "pedido_id": str(db_pedido.id),
             "cliente_id": str(pedido.cliente_id),
             "restaurante_id": str(pedido.restaurante_id),
-            "total": float(pedido_validado.total),
+            "restaurante_nome": restaurante.get('nome', 'Unknown'),
+            "total": float(pedido_completo.total),
             "cep": cep,
             "endereco_validado": True,
         }
         publicar_evento("pedidos", evento)
         
         print(f"📦 Pedido {db_pedido.id} criado e evento publicado!")
+        print(f"💰 Total do pedido: R$ {pedido_completo.total:.2f}")
         
-        # RETORNO CORRETO: 201 Created com Location header
         return Response(
             status_code=status.HTTP_201_CREATED,
             headers={"Location": f"/pedidos/{db_pedido.id}"}
@@ -442,8 +539,6 @@ def atualizar_status_pedido(
     """
     Atualiza o status de um pedido. 
     Publica o evento 'PEDIDO_STATUS_ATUALIZADO' no Redis.
-    
-    Retorna: 204 No Content sem body
     """
     try:
         # Validação do status
@@ -470,7 +565,6 @@ def atualizar_status_pedido(
         
         print(f"🔄 Status do pedido {pedido_id} atualizado para: {status}")
         
-        # RETORNO CORRETO: 204 No Content sem body
         return Response(status_code=status.HTTP_204_NO_CONTENT)
         
     except HTTPException:
@@ -488,7 +582,6 @@ def atualizar_status_pedido(
     status_code=status.HTTP_204_NO_CONTENT
 )
 def deletar_pedido(pedido_id: uuid.UUID, db: Session = Depends(get_db)):
-    """Deleta um pedido do banco de dados. Esta operação é irreversível."""
     try:
         db_pedido = crud.delete_pedido(db, pedido_id=pedido_id)
         if db_pedido is None:
@@ -501,7 +594,7 @@ def deletar_pedido(pedido_id: uuid.UUID, db: Session = Depends(get_db)):
         }
         publicar_evento("pedidos", evento)
         
-        return Response(status_code=status.HTTP_204_NO_CONTENT)  # 204 No Content
+        return Response(status_code=status.HTTP_204_NO_CONTENT)
         
     except HTTPException:
         raise
@@ -511,7 +604,6 @@ def deletar_pedido(pedido_id: uuid.UUID, db: Session = Depends(get_db)):
             detail=f"Erro ao deletar pedido: {str(e)}"
         )
 
-# Novo endpoint para testar a validação de CEP
 @app.get("/cep/validar/{cep}", summary="Validar CEP", tags=["Utilitários"])
 def validar_cep(cep: str):
     """

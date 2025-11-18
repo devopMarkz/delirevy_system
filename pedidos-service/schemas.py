@@ -4,6 +4,19 @@ from datetime import datetime
 import uuid
 import re
 
+# NOVO SCHEMA PARA ITENS SIMPLIFICADOS NO CREATE
+class ItemPedidoCreateSimplificado(BaseModel):
+    produto_id: uuid.UUID
+    quantidade: int
+
+    @field_validator('quantidade')
+    @classmethod
+    def validar_quantidade(cls, v):
+        if v <= 0:
+            raise ValueError('Quantidade deve ser maior que zero')
+        return v
+
+# SCHEMA ORIGINAL PARA ITENS COMPLETOS (usado na resposta)
 class ItemPedidoBase(BaseModel):
     produto_id: uuid.UUID
     produto_nome: str
@@ -89,6 +102,20 @@ class PedidoBase(BaseModel):
     cliente_id: uuid.UUID
     restaurante_id: uuid.UUID
     itens: List[ItemPedidoCreate]
+    endereco_entrega: EnderecoEntrega
+
+    @field_validator('itens')
+    @classmethod
+    def validar_itens(cls, v):
+        if not v or len(v) == 0:
+            raise ValueError('Pedido deve conter pelo menos um item')
+        return v
+
+# NOVO SCHEMA PARA CREATE SIMPLIFICADO
+class PedidoCreateSimplificado(BaseModel):
+    cliente_id: uuid.UUID
+    restaurante_id: uuid.UUID
+    itens: List[ItemPedidoCreateSimplificado]
     endereco_entrega: EnderecoEntrega
 
     @field_validator('itens')

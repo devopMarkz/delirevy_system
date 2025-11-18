@@ -85,40 +85,34 @@ def escutar_eventos_pedidos():
                     except Exception as e:
                         print(f"❌ Erro ao processar evento: {e}")
                 
-                # Pequena pausa para não sobrecarregar a CPU
                 time.sleep(0.1)
                         
         except Exception as e:
             if not listener_stop_event.is_set():
                 print(f"❌ Erro no listener, reconectando...: {e}")
-                time.sleep(2)  # Espera antes de reconectar
+                time.sleep(2)
     
     print("🛑 Listener de eventos de pedidos parado.")
 
-# 🔥 LIFESPAN MODERNO (substitui o on_event deprecated)
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Startup
-    print("🚀 Pagamentos Service: Iniciando servidor...")
+    print("Pagamentos Service: Iniciando servidor...")
     
-    # Iniciar o listener do Redis
     listener_stop_event.clear()
     listener_thread = threading.Thread(target=escutar_eventos_pedidos)
     listener_thread.daemon = True
     listener_thread.start()
-    print("✅ Listener de eventos de pedidos iniciado automaticamente!")
+    print("Listener de eventos de pedidos iniciado automaticamente!")
     
-    yield  # Aqui o app está rodando
+    yield
     
-    # Shutdown
-    print("🛑 Pagamentos Service: Parando servidor...")
+    print("Pagamentos Service: Parando servidor...")
     listener_stop_event.set()
     
     if listener_thread and listener_thread.is_alive():
         listener_thread.join(timeout=5)
         print("✅ Listener de eventos de pedidos parado corretamente.")
 
-# Criar app com lifespan
 app = FastAPI(
     title="Pagamentos Service",
     description="Microsserviço para gerenciamento de pagamentos e estornos. Simula a comunicação com um gateway de pagamento externo e publica eventos de 'PAGAMENTO_PROCESSADO'.",

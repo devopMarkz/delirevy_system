@@ -2,11 +2,10 @@ from sqlalchemy.orm import Session
 import models
 import schemas
 import uuid
-import json  # ADICIONE ESTE IMPORT
+import json
 from typing import List, Optional
 
 def create_pedido(db: Session, pedido: schemas.PedidoCreate):
-    # CONVERTE UUIDs PARA STRING ANTES DE SALVAR
     itens_serializados = []
     for item in pedido.itens:
         itens_serializados.append({
@@ -19,7 +18,7 @@ def create_pedido(db: Session, pedido: schemas.PedidoCreate):
     db_pedido = models.Pedido(
         cliente_id=pedido.cliente_id,
         restaurante_id=pedido.restaurante_id,
-        itens=itens_serializados,  # USA A LISTA SERIALIZADA
+        itens=itens_serializados,
         total=pedido.total,
         endereco_entrega=pedido.endereco_entrega.dict(),
         status="PENDENTE"

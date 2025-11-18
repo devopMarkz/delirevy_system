@@ -21,7 +21,7 @@ models.Base.metadata.create_all(bind=engine)
 # Redis
 redis_client = redis.Redis(host='redis', port=6379, decode_responses=True)
 
-# 🔥 VARIÁVEIS GLOBAIS PARA CONTROLE DO LISTENER
+# VARIÁVEIS GLOBAIS PARA CONTROLE DO LISTENER
 listener_thread = None
 listener_stop_event = threading.Event()
 
@@ -231,32 +231,27 @@ def escutar_eventos_pedidos():
                     except Exception as e:
                         print(f"❌ Erro ao processar evento: {e}")
                 
-                # Pequena pausa para não sobrecarregar a CPU
                 time.sleep(0.1)
                         
         except Exception as e:
             if not listener_stop_event.is_set():
                 print(f"❌ Erro no listener, reconectando...: {e}")
-                time.sleep(2)  # Espera antes de reconectar
+                time.sleep(2)
     
     print("🛑 Listener de eventos de pedidos parado.")
 
-# 🔥 LIFESPAN MODERNO (substitui o on_event deprecated)
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Startup
     print("🚀 Restaurantes Service: Iniciando servidor...")
     
-    # Iniciar o listener do Redis
     listener_stop_event.clear()
     listener_thread = threading.Thread(target=escutar_eventos_pedidos)
     listener_thread.daemon = True
     listener_thread.start()
     print("✅ Listener de eventos de pedidos iniciado automaticamente!")
     
-    yield  # Aqui o app está rodando
+    yield
     
-    # Shutdown
     print("🛑 Restaurantes Service: Parando servidor...")
     listener_stop_event.set()
     
@@ -297,7 +292,6 @@ def criar_restaurante(restaurante: schemas.RestauranteCreate, db: Session = Depe
     Retorna: 201 Created com header Location apontando para o recurso criado
     """
     try:
-        # Validação adicional
         if restaurante.taxa_entrega < 0:
             raise HTTPException(
                 status_code=400,
@@ -313,7 +307,6 @@ def criar_restaurante(restaurante: schemas.RestauranteCreate, db: Session = Depe
         
         db_restaurante = crud.create_restaurante(db=db, restaurante=restaurante)
         
-        # RETORNO CORRETO: 201 Created com Location header
         return Response(
             status_code=status.HTTP_201_CREATED,
             headers={"Location": f"/restaurantes/{db_restaurante.id}"}
@@ -385,7 +378,6 @@ def atualizar_restaurante(restaurante_id: uuid.UUID, restaurante_update: schemas
     Retorna: 204 No Content sem body
     """
     try:
-        # Validação adicional
         if restaurante_update.taxa_entrega is not None and restaurante_update.taxa_entrega < 0:
             raise HTTPException(
                 status_code=400,
@@ -396,7 +388,6 @@ def atualizar_restaurante(restaurante_id: uuid.UUID, restaurante_update: schemas
         if db_restaurante is None:
             raise HTTPException(status_code=404, detail="Restaurante não encontrado")
         
-        # RETORNO CORRETO: 204 No Content sem body
         return Response(status_code=status.HTTP_204_NO_CONTENT)
         
     except ValidationError as e:
@@ -416,13 +407,12 @@ def atualizar_restaurante(restaurante_id: uuid.UUID, restaurante_update: schemas
     status_code=status.HTTP_204_NO_CONTENT
 )
 def deletar_restaurante(restaurante_id: uuid.UUID, db: Session = Depends(get_db)):
-    """Deleta um restaurante do banco de dados. Esta operação é irreversível."""
     try:
         db_restaurante = crud.delete_restaurante(db, restaurante_id=restaurante_id)
         if db_restaurante is None:
             raise HTTPException(status_code=404, detail="Restaurante não encontrado")
         
-        return Response(status_code=status.HTTP_204_NO_CONTENT)  # 204 No Content
+        return Response(status_code=status.HTTP_204_NO_CONTENT)
         
     except HTTPException:
         raise
@@ -448,7 +438,6 @@ def criar_categoria(categoria: schemas.CategoriaCreate, db: Session = Depends(ge
     try:
         db_categoria = crud.create_categoria(db=db, categoria=categoria)
         
-        # RETORNO CORRETO: 201 Created com Location header
         return Response(
             status_code=status.HTTP_201_CREATED,
             headers={"Location": f"/categorias/{db_categoria.id}"}
@@ -497,7 +486,6 @@ def criar_produto(produto: schemas.ProdutoCreate, db: Session = Depends(get_db))
     Retorna: 201 Created com header Location apontando para o recurso criado
     """
     try:
-        # Validação adicional
         if produto.preco <= 0:
             raise HTTPException(
                 status_code=400,
@@ -506,7 +494,6 @@ def criar_produto(produto: schemas.ProdutoCreate, db: Session = Depends(get_db))
         
         db_produto = crud.create_produto(db=db, produto=produto)
         
-        # RETORNO CORRETO: 201 Created com Location header
         return Response(
             status_code=status.HTTP_201_CREATED,
             headers={"Location": f"/produtos/{db_produto.id}"}
@@ -574,11 +561,8 @@ def obter_produto(produto_id: uuid.UUID, db: Session = Depends(get_db)):
 def atualizar_produto(produto_id: uuid.UUID, produto_update: schemas.ProdutoUpdate, db: Session = Depends(get_db)):
     """
     Atualiza as informações de um produto existente.
-    
-    Retorna: 204 No Content sem body
     """
     try:
-        # Validação adicional
         if produto_update.preco is not None and produto_update.preco <= 0:
             raise HTTPException(
                 status_code=400,
@@ -589,7 +573,6 @@ def atualizar_produto(produto_id: uuid.UUID, produto_update: schemas.ProdutoUpda
         if db_produto is None:
             raise HTTPException(status_code=404, detail="Produto não encontrado")
         
-        # RETORNO CORRETO: 204 No Content sem body
         return Response(status_code=status.HTTP_204_NO_CONTENT)
         
     except ValidationError as e:
@@ -609,13 +592,12 @@ def atualizar_produto(produto_id: uuid.UUID, produto_update: schemas.ProdutoUpda
     status_code=status.HTTP_204_NO_CONTENT
 )
 def deletar_produto(produto_id: uuid.UUID, db: Session = Depends(get_db)):
-    """Deleta um produto do banco de dados. Esta operação é irreversível."""
     try:
         db_produto = crud.delete_produto(db, produto_id=produto_id)
         if db_produto is None:
             raise HTTPException(status_code=404, detail="Produto não encontrado")
         
-        return Response(status_code=status.HTTP_204_NO_CONTENT)  # 204 No Content
+        return Response(status_code=status.HTTP_204_NO_CONTENT)
         
     except HTTPException:
         raise
