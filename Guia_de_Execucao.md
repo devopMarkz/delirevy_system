@@ -21,11 +21,7 @@ Abra o arquivo `restaurantes-service/main.py` e localize a linha 29:
 SENDGRID_API_KEY = os.getenv('SENDGRID_API_KEY', 'xxx')
 ```
 
-Substituir 'xxx' pela chave fornecida:
-
-```python
-SENDGRID_API_KEY = os.getenv('SENDGRID_API_KEY', 'xxx')
-```
+Substituir 'xxx' pela chave fornecida na DOCUMENTAÇÃO TÉCNICA
 
 Salve o arquivo e prossiga para a inicialização dos serviços.
 
