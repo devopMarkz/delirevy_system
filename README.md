@@ -38,7 +38,7 @@ DELIVERY-SYSTEM/
 
 ## Iniciar os Serviços
 
-Após configurar a SendGrid API Key, na raiz do projeto (onde está o docker-compose.yml), execute:
+Após configurar a SendGrid API Key, execute:
 
 ```bash
 docker-compose up -d
