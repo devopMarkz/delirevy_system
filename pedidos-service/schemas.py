@@ -111,7 +111,6 @@ class PedidoBase(BaseModel):
             raise ValueError('Pedido deve conter pelo menos um item')
         return v
 
-# NOVO SCHEMA PARA CREATE SIMPLIFICADO
 class PedidoCreateSimplificado(BaseModel):
     cliente_id: uuid.UUID
     restaurante_id: uuid.UUID

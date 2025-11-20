@@ -287,7 +287,6 @@ async def lifespan(app: FastAPI):
         listener_thread.join(timeout=5)
         print("Listener de eventos de pagamentos parado corretamente.")
 
-# Criar app com lifespan
 app = FastAPI(
     title="Pedidos Service",
     description="Microsserviço para gerenciamento de pedidos. Inclui validação de endereço via ViaCEP e comunicação assíncrona via Redis.",

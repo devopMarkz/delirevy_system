@@ -60,10 +60,10 @@ def obter_email_restaurante(restaurante_id: str) -> str:
             return restaurante.email
         else:
             print(f"⚠️  Restaurante {restaurante_id} não encontrado ou sem email cadastrado")
-            return "marcosacs.2022@gmail.com"  # Fallback
+            return "marcosacs.2022@gmail.com"
     except Exception as e:
         print(f"❌ Erro ao buscar restaurante no banco: {e}")
-        return "marcosacs.2022@gmail.com"  # Fallback
+        return "marcosacs.2022@gmail.com" 
     finally:
         db.close()
 
@@ -259,7 +259,6 @@ async def lifespan(app: FastAPI):
         listener_thread.join(timeout=5)
         print("✅ Listener de eventos de pedidos parado corretamente.")
 
-# Criar app com lifespan
 app = FastAPI(
     title="Restaurantes Service",
     description="Microsserviço para gerenciamento de restaurantes, categorias e produtos. Responsável por notificar restaurantes sobre novos pedidos via e-mail.",

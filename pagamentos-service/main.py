@@ -18,16 +18,13 @@ from fastapi.responses import Response
 # Criar tabelas
 models.Base.metadata.create_all(bind=engine)
 
-# Redis
 redis_client = redis.Redis(host='redis', port=6379, decode_responses=True)
 
-# 🔥 VARIÁVEIS GLOBAIS PARA CONTROLE DO LISTENER
 listener_thread = None
 listener_stop_event = threading.Event()
 
 # Função para publicar evento
 def publicar_evento(channel: str, evento: dict):
-    """Publica um evento no canal Redis especificado."""
     try:
         evento['timestamp'] = str(datetime.now())
         redis_client.publish(channel, json.dumps(evento))
@@ -70,7 +67,6 @@ def escutar_eventos_pedidos():
                             print(f"💰 ANALYTICS: Novo pedido {pedido_id} criado")
                             print(f"   👤 Cliente: {cliente_id}")
                             print(f"   💰 Valor: R$ {total}")
-                            print(f"   📊 Registrado no sistema de analytics de pagamentos")
                             
                         elif evento.get('tipo') == 'PEDIDO_STATUS_ATUALIZADO':
                             pedido_id = evento['pedido_id']
@@ -137,7 +133,7 @@ def processar_pagamento_em_background(pagamento_id: uuid.UUID):
         
         print(f"🔄 Processando pagamento {pagamento_id} em background...")
         
-        # 🔥 SIMULAÇÃO SEMPRE APROVADA
+        # SIMULAÇÃO SEMPRE APROVADA
         transacao_id = f"trans_{uuid.uuid4().hex[:16]}"
         novo_status = "APROVADO"
         
@@ -216,7 +212,6 @@ async def criar_pagamento(
         # Processar pagamento em background
         background_tasks.add_task(processar_pagamento_em_background, db_pagamento.id)
         
-        # RETORNO CORRETO: 201 Created com Location header
         return Response(
             status_code=status.HTTP_201_CREATED,
             headers={"Location": f"/pagamentos/{db_pagamento.id}"}
@@ -312,7 +307,6 @@ def atualizar_pagamento(pagamento_id: uuid.UUID, pagamento_update: schemas.Pagam
         # Publicar evento de pagamento processado com o novo status
         publicar_evento_pagamento(db_pagamento.id, db_pagamento.pedido_id, db_pagamento.status)
         
-        # RETORNO CORRETO: 204 No Content sem body
         return Response(status_code=status.HTTP_204_NO_CONTENT)
         
     except HTTPException:
@@ -327,13 +321,12 @@ def atualizar_pagamento(pagamento_id: uuid.UUID, pagamento_update: schemas.Pagam
     status_code=status.HTTP_204_NO_CONTENT
 )
 def deletar_pagamento(pagamento_id: uuid.UUID, db: Session = Depends(get_db)):
-    """Deleta um registro de pagamento do banco de dados. Esta operação é irreversível."""
     try:
         db_pagamento = crud.delete_pagamento(db, pagamento_id=pagamento_id)
         if db_pagamento is None:
             raise HTTPException(status_code=404, detail="Pagamento não encontrado")
         
-        return Response(status_code=status.HTTP_204_NO_CONTENT)  # 204 No Content
+        return Response(status_code=status.HTTP_204_NO_CONTENT)
         
     except HTTPException:
         raise
@@ -370,7 +363,6 @@ def criar_estorno(estorno: schemas.EstornoCreate, db: Session = Depends(get_db))
                 detail="Valor do estorno não pode ser maior que o valor do pagamento"
             )
         
-        # 🔥 CORREÇÃO: ATUALIZAR STATUS DO PAGAMENTO PARA ESTORNADO
         pagamento_update = schemas.PagamentoUpdate(status="ESTORNADO")
         pagamento_atualizado = crud.update_pagamento(db, pagamento_id=estorno.pagamento_id, pagamento_update=pagamento_update)
         
@@ -390,7 +382,6 @@ def criar_estorno(estorno: schemas.EstornoCreate, db: Session = Depends(get_db))
         
         print(f"💰 Estorno criado para pagamento {estorno.pagamento_id}")
         
-        # RETORNO CORRETO: 201 Created com Location header
         return Response(
             status_code=status.HTTP_201_CREATED,
             headers={"Location": f"/estornos/{db_estorno.id}"}
