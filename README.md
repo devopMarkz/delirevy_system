@@ -181,6 +181,7 @@ EXIT
 7. Criar estorno via POST /estornos (se necessário)
 
 Consulte a documentação técnica para detalhes sobre modelos de dados e fluxos de negócio.
+Importe no Postman a Collection salva na pasta raiz do projeto para facilitar os testes.
 
 ## Parar Execução
 
