@@ -1,0 +1,1751 @@
+{
+	"info": {
+		"_postman_id": "ecb30a23-b2d6-4ce9-b4be-655cbfffa04c",
+		"name": "DELIVERY SYSTEM",
+		"description": "# 🚀 Get started here\n\nThis template guides you through CRUD operations (GET, POST, PUT, DELETE), variables, and tests.\n\n## 🔖 **How to use this template**\n\n#### **Step 1: Send requests**\n\nRESTful APIs allow you to perform CRUD operations using the POST, GET, PUT, and DELETE HTTP methods.\n\nThis collection contains each of these [request](https://learning.postman.com/docs/sending-requests/requests/) types. Open each request and click \"Send\" to see what happens.\n\n#### **Step 2: View responses**\n\nObserve the response tab for status code (200 OK), response time, and size.\n\n#### **Step 3: Send new Body data**\n\nUpdate or add new data in \"Body\" in the POST request. Typically, Body data is also used in PUT request.\n\n```\n{\n    \"name\": \"Add your name in the body\"\n}\n\n ```\n\n#### **Step 4: Update the variable**\n\nVariables enable you to store and reuse values in Postman. We have created a [variable](https://learning.postman.com/docs/sending-requests/variables/) called `base_url` with the sample request [https://postman-api-learner.glitch.me](https://postman-api-learner.glitch.me). Replace it with your API endpoint to customize this collection.\n\n#### **Step 5: Add tests in the \"Scripts\" tab**\n\nAdding tests to your requests can help you confirm that your API is working as expected. You can write test scripts in JavaScript and view the output in the \"Test Results\" tab.\n\n<img src=\"https://content.pstmn.io/fa30ea0a-373d-4545-a668-e7b283cca343/aW1hZ2UucG5n\" alt=\"\" height=\"1530\" width=\"2162\">\n\n## 💪 Pro tips\n\n- Use folders to group related requests and organize the collection.\n    \n- Add more [scripts](https://learning.postman.com/docs/writing-scripts/intro-to-scripts/) to verify if the API works as expected and execute workflows.\n    \n\n## 💡Related templates\n\n[API testing basics](https://go.postman.co/redirect/workspace?type=personal&collectionTemplateId=e9a37a28-055b-49cd-8c7e-97494a21eb54&sourceTemplateId=ddb19591-3097-41cf-82af-c84273e56719)  \n[API documentation](https://go.postman.co/redirect/workspace?type=personal&collectionTemplateId=e9c28f47-1253-44af-a2f3-20dce4da1f18&sourceTemplateId=ddb19591-3097-41cf-82af-c84273e56719)  \n[Authorization methods](https://go.postman.co/redirect/workspace?type=personal&collectionTemplateId=31a9a6ed-4cdf-4ced-984c-d12c9aec1c27&sourceTemplateId=ddb19591-3097-41cf-82af-c84273e56719)",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+		"_exporter_id": "24461704",
+		"_collection_link": "https://blue-spaceship-684184.postman.co/workspace/Team-Workspace~7c27a2da-0ab3-473b-8c5d-f0076b822542/collection/24461704-ecb30a23-b2d6-4ce9-b4be-655cbfffa04c?action=share&source=collection_link&creator=24461704"
+	},
+	"item": [
+		{
+			"name": "API - PAGAMENTOS",
+			"item": [
+				{
+					"name": "Pagamentos",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "http://localhost:8003/pagamentos/",
+							"protocol": "http",
+							"host": [
+								"localhost"
+							],
+							"port": "8003",
+							"path": [
+								"pagamentos",
+								""
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Pagamentos",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"pedido_id\": \"dea6dc78-db1d-4781-a10c-dfe08f983716\",\n    \"cliente_id\": \"123e4567-e89b-12d3-a456-426614174002\",\n    \"valor\": 15.5,\n    \"metodo_pagamento\": \"pix\"\n  }",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "http://localhost:8003/pagamentos/",
+							"protocol": "http",
+							"host": [
+								"localhost"
+							],
+							"port": "8003",
+							"path": [
+								"pagamentos",
+								""
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Pagamento By Id",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "http://localhost:8003/pagamentos/56e37583-68fd-4d71-b739-132b58ee61eb",
+							"protocol": "http",
+							"host": [
+								"localhost"
+							],
+							"port": "8003",
+							"path": [
+								"pagamentos",
+								"56e37583-68fd-4d71-b739-132b58ee61eb"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Pagamento By Pedido",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "http://localhost:8003/pagamentos/pedido/892eb7d4-667d-487a-a037-4c9e322ec1b2",
+							"protocol": "http",
+							"host": [
+								"localhost"
+							],
+							"port": "8003",
+							"path": [
+								"pagamentos",
+								"pedido",
+								"892eb7d4-667d-487a-a037-4c9e322ec1b2"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Pagamentos",
+					"request": {
+						"method": "PUT",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"status\": \"APROVADO\",\n    \"transacao_id\": \"trans_abc123\"\n  }",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "http://localhost:8003/pagamentos/558b0ed9-7df0-48c0-91f2-17dbf5a7e856",
+							"protocol": "http",
+							"host": [
+								"localhost"
+							],
+							"port": "8003",
+							"path": [
+								"pagamentos",
+								"558b0ed9-7df0-48c0-91f2-17dbf5a7e856"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Pagamentos",
+					"request": {
+						"method": "DELETE",
+						"header": [],
+						"url": {
+							"raw": "http://localhost:8003/pagamentos/56e37583-68fd-4d71-b739-132b58ee61eb",
+							"protocol": "http",
+							"host": [
+								"localhost"
+							],
+							"port": "8003",
+							"path": [
+								"pagamentos",
+								"56e37583-68fd-4d71-b739-132b58ee61eb"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Estornos",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"pagamento_id\": \"56e37583-68fd-4d71-b739-132b58ee61eb\",\n    \"valor_estornado\": 15.5,\n    \"motivo\": \"Pedido cancelado pelo cliente\"\n  }",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "http://localhost:8003/estornos/",
+							"protocol": "http",
+							"host": [
+								"localhost"
+							],
+							"port": "8003",
+							"path": [
+								"estornos",
+								""
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Estornos",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "http://localhost:8003/estornos/pagamento/558b0ed9-7df0-48c0-91f2-17dbf5a7e856",
+							"protocol": "http",
+							"host": [
+								"localhost"
+							],
+							"port": "8003",
+							"path": [
+								"estornos",
+								"pagamento",
+								"558b0ed9-7df0-48c0-91f2-17dbf5a7e856"
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "API - PEDIDOS",
+			"item": [
+				{
+					"name": "Pedidos",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "http://localhost:8001/pedidos/",
+							"protocol": "http",
+							"host": [
+								"localhost"
+							],
+							"port": "8001",
+							"path": [
+								"pedidos",
+								""
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Pedidos",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"cliente_id\": \"123e4567-e89b-12d3-a456-426614174002\",\n    \"restaurante_id\": \"def23186-e777-4c14-ab09-7de3260cc3dc\",\n    \"endereco_entrega\": {\n        \"rua\": \"Rua Teste\",\n        \"numero\": \"123\",\n        \"bairro\": \"Centro\",\n        \"cidade\": \"São Paulo\",\n        \"estado\": \"SP\",\n        \"cep\": \"01001-000\"\n    },\n    \"itens\": [\n        {\n            \"produto_id\": \"90514020-a435-48f1-a4f1-c37136ff719d\",\n            \"quantidade\": 2\n        }\n    ]\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "http://localhost:8001/pedidos/",
+							"protocol": "http",
+							"host": [
+								"localhost"
+							],
+							"port": "8001",
+							"path": [
+								"pedidos",
+								""
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Pedido By Id",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "http://localhost:8001/pedidos/1a39c6dc-4191-42ac-9c1b-9d0de629dc60",
+							"protocol": "http",
+							"host": [
+								"localhost"
+							],
+							"port": "8001",
+							"path": [
+								"pedidos",
+								"1a39c6dc-4191-42ac-9c1b-9d0de629dc60"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Pedidos By Cliente",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "http://localhost:8001/pedidos/cliente/123e4567-e89b-12d3-a456-426614174002",
+							"protocol": "http",
+							"host": [
+								"localhost"
+							],
+							"port": "8001",
+							"path": [
+								"pedidos",
+								"cliente",
+								"123e4567-e89b-12d3-a456-426614174002"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Pedidos By Restaurante",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "http://localhost:8001/pedidos/restaurante/def23186-e777-4c14-ab09-7de3260cc3dc",
+							"protocol": "http",
+							"host": [
+								"localhost"
+							],
+							"port": "8001",
+							"path": [
+								"pedidos",
+								"restaurante",
+								"def23186-e777-4c14-ab09-7de3260cc3dc"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Pedidos",
+					"request": {
+						"method": "PUT",
+						"header": [],
+						"url": {
+							"raw": "http://localhost:8001/pedidos/892eb7d4-667d-487a-a037-4c9e322ec1b2/status?status=EM_PREPARO",
+							"protocol": "http",
+							"host": [
+								"localhost"
+							],
+							"port": "8001",
+							"path": [
+								"pedidos",
+								"892eb7d4-667d-487a-a037-4c9e322ec1b2",
+								"status"
+							],
+							"query": [
+								{
+									"key": "status",
+									"value": "EM_PREPARO"
+								}
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Pedidos",
+					"request": {
+						"method": "DELETE",
+						"header": [],
+						"url": {
+							"raw": "http://localhost:8001/pedidos/123e4567-e89b-12d3-a456-426614174002",
+							"protocol": "http",
+							"host": [
+								"localhost"
+							],
+							"port": "8001",
+							"path": [
+								"pedidos",
+								"123e4567-e89b-12d3-a456-426614174002"
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "API - RESTAURANTES",
+			"item": [
+				{
+					"name": "Restaurantes",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "http://localhost:8000/restaurantes?skip=0&limit=10",
+							"protocol": "http",
+							"host": [
+								"localhost"
+							],
+							"port": "8000",
+							"path": [
+								"restaurantes"
+							],
+							"query": [
+								{
+									"key": "skip",
+									"value": "0"
+								},
+								{
+									"key": "limit",
+									"value": "10"
+								}
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Restaurantes",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"nome\": \"Pizzaria do João\",\n    \"descricao\": \"Melhor pizza da cidade\",\n    \"cnpj\": \"02.542.273/0001-91\",\n    \"telefone\": \"(11) 9999-8888\",\n    \"email\": \"marcosdev2002@gmail.com\",\n    \"endereco\": \"Rua das Flores, 123 - Centro\",\n    \"tempo_medio_entrega\": \"30-45 min\",\n    \"taxa_entrega\": 5.0\n  }",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "http://localhost:8002/restaurantes",
+							"protocol": "http",
+							"host": [
+								"localhost"
+							],
+							"port": "8002",
+							"path": [
+								"restaurantes"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Restaurantes by id",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "http://localhost:8000/restaurantes/be61355a-388b-4b29-ac55-0545b8f0c71e",
+							"protocol": "http",
+							"host": [
+								"localhost"
+							],
+							"port": "8000",
+							"path": [
+								"restaurantes",
+								"be61355a-388b-4b29-ac55-0545b8f0c71e"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Produtos by Restaurante Id",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "http://localhost:8000/restaurantes/0810ed9f-1611-45be-bb07-f828bb4547e7/produtos",
+							"protocol": "http",
+							"host": [
+								"localhost"
+							],
+							"port": "8000",
+							"path": [
+								"restaurantes",
+								"0810ed9f-1611-45be-bb07-f828bb4547e7",
+								"produtos"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Categorias de Produtos",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"nome\": \"Pizzas\",\n    \"descricao\": \"Pizzas tradicionais e especiais\"\n  }",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "http://localhost:8002/categorias",
+							"protocol": "http",
+							"host": [
+								"localhost"
+							],
+							"port": "8002",
+							"path": [
+								"categorias"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Categorias",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "http://localhost:8000/categorias",
+							"protocol": "http",
+							"host": [
+								"localhost"
+							],
+							"port": "8000",
+							"path": [
+								"categorias"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Produtos",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"nome\": \"Pizza Calabresa\",\n    \"descricao\": \"Pizza de calabresa com cebola\",\n    \"preco\": 45.90,\n    \"tempo_preparo\": \"25 min\",\n    \"imagem_url\": \"http://exemplo.com/calabresa.jpg\",\n    \"restaurante_id\": \"def23186-e777-4c14-ab09-7de3260cc3dc\",\n    \"categoria_id\": \"c55620ff-8b04-4b48-9bf3-5736a661137a\"\n  }",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "http://localhost:8002/produtos",
+							"protocol": "http",
+							"host": [
+								"localhost"
+							],
+							"port": "8002",
+							"path": [
+								"produtos"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Produtos By Restaurante Id",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "http://localhost:8002/produtos/restaurante/def23186-e777-4c14-ab09-7de3260cc3dc",
+							"protocol": "http",
+							"host": [
+								"localhost"
+							],
+							"port": "8002",
+							"path": [
+								"produtos",
+								"restaurante",
+								"def23186-e777-4c14-ab09-7de3260cc3dc"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Produto By Id",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "http://localhost:8002/produtos/90514020-a435-48f1-a4f1-c37136ff719d",
+							"protocol": "http",
+							"host": [
+								"localhost"
+							],
+							"port": "8002",
+							"path": [
+								"produtos",
+								"90514020-a435-48f1-a4f1-c37136ff719d"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Produtos",
+					"request": {
+						"method": "PUT",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"preco\": 27.90\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "http://localhost:8002/produtos/74e52c16-08b6-4f60-802b-e1b3755a00db",
+							"protocol": "http",
+							"host": [
+								"localhost"
+							],
+							"port": "8002",
+							"path": [
+								"produtos",
+								"74e52c16-08b6-4f60-802b-e1b3755a00db"
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "API GATEWAY",
+			"item": [
+				{
+					"name": "RESTAURANTES",
+					"item": [
+						{
+							"name": "Restaurantes",
+							"request": {
+								"method": "GET",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"url": {
+									"raw": "http://localhost:8000/restaurantes?skip=0&limit=10&ativo=true",
+									"protocol": "http",
+									"host": [
+										"localhost"
+									],
+									"port": "8000",
+									"path": [
+										"restaurantes"
+									],
+									"query": [
+										{
+											"key": "skip",
+											"value": "0"
+										},
+										{
+											"key": "limit",
+											"value": "10"
+										},
+										{
+											"key": "ativo",
+											"value": "true"
+										}
+									]
+								}
+							},
+							"response": []
+						},
+						{
+							"name": "Restaurantes",
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n    \"nome\": \"Pizzaria do João\",\n    \"descricao\": \"Melhor pizza da cidade\",\n    \"cnpj\": \"13.234.587/0001-45\",\n    \"telefone\": \"(11) 99999-9999\",\n    \"email\": \"marcosdev2002@gmail.com\",\n    \"endereco\": \"Rua das Flores, 123 - Centro\",\n    \"tempo_medio_entrega\": \"30-45min\",\n    \"taxa_entrega\": 5.0\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "http://localhost:8000/restaurantes",
+									"protocol": "http",
+									"host": [
+										"localhost"
+									],
+									"port": "8000",
+									"path": [
+										"restaurantes"
+									]
+								}
+							},
+							"response": []
+						},
+						{
+							"name": "Restaurante By Id",
+							"request": {
+								"method": "GET",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"url": {
+									"raw": "http://localhost:8000/restaurantes/4296b0bd-f55f-423e-9b09-09f18c3b5cb5",
+									"protocol": "http",
+									"host": [
+										"localhost"
+									],
+									"port": "8000",
+									"path": [
+										"restaurantes",
+										"4296b0bd-f55f-423e-9b09-09f18c3b5cb5"
+									]
+								}
+							},
+							"response": []
+						},
+						{
+							"name": "Restaurantes",
+							"request": {
+								"method": "PUT",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n    \"nome\": \"Pizzaria do João - Nova Marca\",\n    \"taxa_entrega\": 4.5\n  }",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "http://localhost:8000/restaurantes/b97b65f9-8d6e-4d8f-bcd6-2f02f768c9ea",
+									"protocol": "http",
+									"host": [
+										"localhost"
+									],
+									"port": "8000",
+									"path": [
+										"restaurantes",
+										"b97b65f9-8d6e-4d8f-bcd6-2f02f768c9ea"
+									]
+								}
+							},
+							"response": []
+						},
+						{
+							"name": "Restaurantes",
+							"request": {
+								"method": "DELETE",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"url": {
+									"raw": "http://localhost:8000/restaurantes/eeb7a799-c23b-4a43-825d-342d1d02325f",
+									"protocol": "http",
+									"host": [
+										"localhost"
+									],
+									"port": "8000",
+									"path": [
+										"restaurantes",
+										"eeb7a799-c23b-4a43-825d-342d1d02325f"
+									]
+								}
+							},
+							"response": []
+						},
+						{
+							"name": "Categorias",
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n    \"nome\": \"Pizzas\",\n    \"descricao\": \"Pizzas tradicionais e especiais\"\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "http://localhost:8000/categorias",
+									"protocol": "http",
+									"host": [
+										"localhost"
+									],
+									"port": "8000",
+									"path": [
+										"categorias"
+									]
+								}
+							},
+							"response": []
+						},
+						{
+							"name": "Categorias",
+							"request": {
+								"method": "GET",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"url": {
+									"raw": "http://localhost:8000/categorias?skip=0&limit=20",
+									"protocol": "http",
+									"host": [
+										"localhost"
+									],
+									"port": "8000",
+									"path": [
+										"categorias"
+									],
+									"query": [
+										{
+											"key": "skip",
+											"value": "0"
+										},
+										{
+											"key": "limit",
+											"value": "20"
+										}
+									]
+								}
+							},
+							"response": []
+						},
+						{
+							"name": "Produtos",
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n    \"nome\": \"Pizza Margherita\",\n    \"descricao\": \"Molho de tomate, mussarela, manjericão\",\n    \"preco\": 50.00,\n    \"restaurante_id\": \"4296b0bd-f55f-423e-9b09-09f18c3b5cb5\",\n    \"categoria_id\": \"df17ad2c-d2b8-437d-902e-b790cf948588\",\n    \"tempo_preparo\": \"25min\",\n    \"imagem_url\": \"https://exemplo.com/pizza.jpg\"\n  }",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "http://localhost:8000/produtos",
+									"protocol": "http",
+									"host": [
+										"localhost"
+									],
+									"port": "8000",
+									"path": [
+										"produtos"
+									]
+								}
+							},
+							"response": []
+						},
+						{
+							"name": "Produto By Id",
+							"request": {
+								"method": "GET",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"url": {
+									"raw": "http://localhost:8000/produtos/8805d8bc-bbc7-48d6-ba44-db2af7c0d16a",
+									"protocol": "http",
+									"host": [
+										"localhost"
+									],
+									"port": "8000",
+									"path": [
+										"produtos",
+										"8805d8bc-bbc7-48d6-ba44-db2af7c0d16a"
+									]
+								}
+							},
+							"response": []
+						},
+						{
+							"name": "Produtos",
+							"request": {
+								"method": "PUT",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n    \"preco\": 50.00,\n    \"disponivel\": true\n  }",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "http://localhost:8000/produtos/a5e831ae-2e3b-488f-afd6-1abe2cc92bdf",
+									"protocol": "http",
+									"host": [
+										"localhost"
+									],
+									"port": "8000",
+									"path": [
+										"produtos",
+										"a5e831ae-2e3b-488f-afd6-1abe2cc92bdf"
+									]
+								}
+							},
+							"response": []
+						},
+						{
+							"name": "Produtos",
+							"request": {
+								"method": "DELETE",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"url": {
+									"raw": "http://localhost:8000/produtos/fce5634e-7e9f-40e5-a525-106747cbe741",
+									"protocol": "http",
+									"host": [
+										"localhost"
+									],
+									"port": "8000",
+									"path": [
+										"produtos",
+										"fce5634e-7e9f-40e5-a525-106747cbe741"
+									]
+								}
+							},
+							"response": []
+						}
+					]
+				},
+				{
+					"name": "PEDIDOS",
+					"item": [
+						{
+							"name": "Pedidos",
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n    \"cliente_id\": \"123e4567-e89b-12d3-a456-426614174002\",\n    \"restaurante_id\": \"4296b0bd-f55f-423e-9b09-09f18c3b5cb5\",\n    \"itens\": [\n      {\n        \"produto_id\": \"8805d8bc-bbc7-48d6-ba44-db2af7c0d16a\", \n        \"quantidade\": 3\n      }\n    ],\n    \"endereco_entrega\": {\n      \"rua\": \"Rua das Flores\",\n      \"numero\": \"123\",\n      \"complemento\": \"Apto 101\",\n      \"bairro\": \"Centro\",\n      \"cidade\": \"São Paulo\",\n      \"estado\": \"SP\",\n      \"cep\": \"65042-235\"\n    }\n  }",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "http://localhost:8000/pedidos",
+									"protocol": "http",
+									"host": [
+										"localhost"
+									],
+									"port": "8000",
+									"path": [
+										"pedidos"
+									]
+								}
+							},
+							"response": []
+						},
+						{
+							"name": "Pedidos",
+							"request": {
+								"method": "GET",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"url": {
+									"raw": "http://localhost:8000/pedidos?skip=0&limit=20",
+									"protocol": "http",
+									"host": [
+										"localhost"
+									],
+									"port": "8000",
+									"path": [
+										"pedidos"
+									],
+									"query": [
+										{
+											"key": "skip",
+											"value": "0"
+										},
+										{
+											"key": "limit",
+											"value": "20"
+										}
+									]
+								}
+							},
+							"response": []
+						},
+						{
+							"name": "Pedidos By Id",
+							"request": {
+								"method": "GET",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"url": {
+									"raw": "http://localhost:8000/pedidos/5dd08c0b-790f-4e73-afc4-97af0f8a50dc",
+									"protocol": "http",
+									"host": [
+										"localhost"
+									],
+									"port": "8000",
+									"path": [
+										"pedidos",
+										"5dd08c0b-790f-4e73-afc4-97af0f8a50dc"
+									]
+								}
+							},
+							"response": []
+						},
+						{
+							"name": "Pedidos",
+							"request": {
+								"method": "PUT",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"url": {
+									"raw": "http://localhost:8000/pedidos/95b5e8a9-06bb-4069-bd52-d95f3375d619/status?status=ENTREGUE",
+									"protocol": "http",
+									"host": [
+										"localhost"
+									],
+									"port": "8000",
+									"path": [
+										"pedidos",
+										"95b5e8a9-06bb-4069-bd52-d95f3375d619",
+										"status"
+									],
+									"query": [
+										{
+											"key": "status",
+											"value": "ENTREGUE"
+										}
+									]
+								}
+							},
+							"response": []
+						},
+						{
+							"name": "Pedidos",
+							"request": {
+								"method": "DELETE",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"url": {
+									"raw": "http://localhost:8000/pedidos/cce7835c-3c41-41ed-9be0-d8b9521c6459",
+									"protocol": "http",
+									"host": [
+										"localhost"
+									],
+									"port": "8000",
+									"path": [
+										"pedidos",
+										"cce7835c-3c41-41ed-9be0-d8b9521c6459"
+									]
+								}
+							},
+							"response": []
+						},
+						{
+							"name": "Pedidos By Cliente",
+							"request": {
+								"method": "GET",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"url": {
+									"raw": "http://localhost:8000/pedidos/cliente/123e4567-e89b-12d3-a456-426614174002?skip=0&limit=20",
+									"protocol": "http",
+									"host": [
+										"localhost"
+									],
+									"port": "8000",
+									"path": [
+										"pedidos",
+										"cliente",
+										"123e4567-e89b-12d3-a456-426614174002"
+									],
+									"query": [
+										{
+											"key": "skip",
+											"value": "0"
+										},
+										{
+											"key": "limit",
+											"value": "20"
+										}
+									]
+								}
+							},
+							"response": []
+						},
+						{
+							"name": "Pedidos By Restaurante",
+							"request": {
+								"method": "GET",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"url": {
+									"raw": "http://localhost:8000/pedidos/restaurante/b97b65f9-8d6e-4d8f-bcd6-2f02f768c9ea?skip=0&limit=20",
+									"protocol": "http",
+									"host": [
+										"localhost"
+									],
+									"port": "8000",
+									"path": [
+										"pedidos",
+										"restaurante",
+										"b97b65f9-8d6e-4d8f-bcd6-2f02f768c9ea"
+									],
+									"query": [
+										{
+											"key": "skip",
+											"value": "0"
+										},
+										{
+											"key": "limit",
+											"value": "20"
+										}
+									]
+								}
+							},
+							"response": []
+						}
+					]
+				},
+				{
+					"name": "PAGAMENTOS",
+					"item": [
+						{
+							"name": "Pagamentos",
+							"request": {
+								"method": "GET",
+								"header": [],
+								"url": {
+									"raw": "http://localhost:8000/pagamentos/",
+									"protocol": "http",
+									"host": [
+										"localhost"
+									],
+									"port": "8000",
+									"path": [
+										"pagamentos",
+										""
+									]
+								}
+							},
+							"response": []
+						},
+						{
+							"name": "Pagamentos",
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n    \"pedido_id\": \"b4947704-3a8f-4715-85a3-fa7b2d8a7dca\",\n    \"cliente_id\": \"123e4567-e89b-12d3-a456-426614174002\",\n    \"valor\": 150.0,\n    \"metodo_pagamento\": \"pix\"\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "http://localhost:8000/pagamentos/",
+									"protocol": "http",
+									"host": [
+										"localhost"
+									],
+									"port": "8000",
+									"path": [
+										"pagamentos",
+										""
+									]
+								}
+							},
+							"response": []
+						},
+						{
+							"name": "Pagamento By Id",
+							"request": {
+								"method": "GET",
+								"header": [],
+								"url": {
+									"raw": "http://localhost:8000/pagamentos/deb7028a-73a2-410f-ba04-1858a3ba0825",
+									"protocol": "http",
+									"host": [
+										"localhost"
+									],
+									"port": "8000",
+									"path": [
+										"pagamentos",
+										"deb7028a-73a2-410f-ba04-1858a3ba0825"
+									]
+								}
+							},
+							"response": []
+						},
+						{
+							"name": "Pagamento By Pedido",
+							"request": {
+								"method": "GET",
+								"header": [],
+								"url": {
+									"raw": "http://localhost:8000/pagamentos/pedido/892eb7d4-667d-487a-a037-4c9e322ec1b2",
+									"protocol": "http",
+									"host": [
+										"localhost"
+									],
+									"port": "8000",
+									"path": [
+										"pagamentos",
+										"pedido",
+										"892eb7d4-667d-487a-a037-4c9e322ec1b2"
+									]
+								}
+							},
+							"response": []
+						},
+						{
+							"name": "Pagamentos",
+							"request": {
+								"method": "PUT",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n    \"status\": \"APROVADO\",\n    \"transacao_id\": \"trans_abc123\"\n  }",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "http://localhost:8000/pagamentos/558b0ed9-7df0-48c0-91f2-17dbf5a7e856",
+									"protocol": "http",
+									"host": [
+										"localhost"
+									],
+									"port": "8000",
+									"path": [
+										"pagamentos",
+										"558b0ed9-7df0-48c0-91f2-17dbf5a7e856"
+									]
+								}
+							},
+							"response": []
+						},
+						{
+							"name": "Pagamentos",
+							"request": {
+								"method": "DELETE",
+								"header": [],
+								"url": {
+									"raw": "http://localhost:8000/pagamentos/56e37583-68fd-4d71-b739-132b58ee61eb",
+									"protocol": "http",
+									"host": [
+										"localhost"
+									],
+									"port": "8000",
+									"path": [
+										"pagamentos",
+										"56e37583-68fd-4d71-b739-132b58ee61eb"
+									]
+								}
+							},
+							"response": []
+						},
+						{
+							"name": "Estornos",
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n    \"pagamento_id\": \"03934a72-6c28-4bfb-9e82-a6d7e083cbf3\",\n    \"valor_estornado\": 150.0,\n    \"motivo\": \"Pedido cancelado pelo cliente\"\n  }",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "http://localhost:8000/estornos/",
+									"protocol": "http",
+									"host": [
+										"localhost"
+									],
+									"port": "8000",
+									"path": [
+										"estornos",
+										""
+									]
+								}
+							},
+							"response": []
+						},
+						{
+							"name": "Estornos",
+							"request": {
+								"method": "GET",
+								"header": [],
+								"url": {
+									"raw": "http://localhost:8000/estornos/pagamento/558b0ed9-7df0-48c0-91f2-17dbf5a7e856",
+									"protocol": "http",
+									"host": [
+										"localhost"
+									],
+									"port": "8000",
+									"path": [
+										"estornos",
+										"pagamento",
+										"558b0ed9-7df0-48c0-91f2-17dbf5a7e856"
+									]
+								}
+							},
+							"response": []
+						}
+					]
+				}
+			]
+		},
+		{
+			"name": "TUTORIAL",
+			"item": [
+				{
+					"name": "1 - Criar Restaurante",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"nome\": \"Pizzaria do Marcos\",\n    \"descricao\": \"Melhor pizza da cidade\",\n    \"cnpj\": \"79.304.197/0001-02\",\n    \"telefone\": \"(11) 99999-9999\",\n    \"email\": \"marcosdev2002@gmail.com\",\n    \"endereco\": \"Rua das Flores, 123 - Centro\",\n    \"tempo_medio_entrega\": \"30-45min\",\n    \"taxa_entrega\": 5.0\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "http://localhost:8000/restaurantes",
+							"protocol": "http",
+							"host": [
+								"localhost"
+							],
+							"port": "8000",
+							"path": [
+								"restaurantes"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "1 - Restaurante By Id",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"url": {
+							"raw": "http://localhost:8000/restaurantes/367c777d-8ddd-461e-ac77-981baab3f269",
+							"protocol": "http",
+							"host": [
+								"localhost"
+							],
+							"port": "8000",
+							"path": [
+								"restaurantes",
+								"367c777d-8ddd-461e-ac77-981baab3f269"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "2 - Criar Categoria",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"nome\": \"Pizzas\",\n    \"descricao\": \"Pizzas tradicionais e especiais\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "http://localhost:8000/categorias",
+							"protocol": "http",
+							"host": [
+								"localhost"
+							],
+							"port": "8000",
+							"path": [
+								"categorias"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "3 - Criar Produto",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"nome\": \"Pizza Margherita\",\n    \"descricao\": \"Molho de tomate, mussarela, manjericão\",\n    \"preco\": 50.00,\n    \"restaurante_id\": \"367c777d-8ddd-461e-ac77-981baab3f269\",\n    \"categoria_id\": \"42840088-5da0-4b29-81d8-18d740292a23\",\n    \"tempo_preparo\": \"25min\",\n    \"imagem_url\": \"https://exemplo.com/pizza.jpg\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "http://localhost:8000/produtos",
+							"protocol": "http",
+							"host": [
+								"localhost"
+							],
+							"port": "8000",
+							"path": [
+								"produtos"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "3 - Produto By Id",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"url": {
+							"raw": "http://localhost:8000/produtos/29212e77-9ff9-4127-bb68-8d6288c1485e",
+							"protocol": "http",
+							"host": [
+								"localhost"
+							],
+							"port": "8000",
+							"path": [
+								"produtos",
+								"29212e77-9ff9-4127-bb68-8d6288c1485e"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "4 - Criar Pedido",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"cliente_id\": \"123e4567-e89b-12d3-a456-426614174002\",\n    \"restaurante_id\": \"367c777d-8ddd-461e-ac77-981baab3f269\",\n    \"itens\": [\n      {\n        \"produto_id\": \"29212e77-9ff9-4127-bb68-8d6288c1485e\", \n        \"quantidade\": 3\n      }\n    ],\n    \"endereco_entrega\": {\n      \"rua\": \"Rua do Cobre\",\n      \"numero\": \"10\",\n      \"complemento\": \"\",\n      \"bairro\": \"Coroado\",\n      \"cidade\": \"São Luís\",\n      \"estado\": \"MA\",\n      \"cep\": \"11111-235\"\n    }\n  }",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "http://localhost:8000/pedidos",
+							"protocol": "http",
+							"host": [
+								"localhost"
+							],
+							"port": "8000",
+							"path": [
+								"pedidos"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "4 - Pedidos By Id",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"url": {
+							"raw": "http://localhost:8000/pedidos/5dd08c0b-790f-4e73-afc4-97af0f8a50dc",
+							"protocol": "http",
+							"host": [
+								"localhost"
+							],
+							"port": "8000",
+							"path": [
+								"pedidos",
+								"5dd08c0b-790f-4e73-afc4-97af0f8a50dc"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "5 - Gerar Pagamentos",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"pedido_id\": \"95b5e8a9-06bb-4069-bd52-d95f3375d619\",\n    \"cliente_id\": \"123e4567-e89b-12d3-a456-426614174002\",\n    \"valor\": 150.0,\n    \"metodo_pagamento\": \"pix\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "http://localhost:8000/pagamentos/",
+							"protocol": "http",
+							"host": [
+								"localhost"
+							],
+							"port": "8000",
+							"path": [
+								"pagamentos",
+								""
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "6 - Gerar Estorno",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"pagamento_id\": \"3483e16a-9842-4528-a456-51c1c9aeb0f3\",\n    \"valor_estornado\": 150.0,\n    \"motivo\": \"Pedido cancelado pelo cliente\"\n  }",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "http://localhost:8000/estornos/",
+							"protocol": "http",
+							"host": [
+								"localhost"
+							],
+							"port": "8000",
+							"path": [
+								"estornos",
+								""
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		}
+	],
+	"event": [
+		{
+			"listen": "prerequest",
+			"script": {
+				"type": "text/javascript",
+				"exec": [
+					""
+				]
+			}
+		},
+		{
+			"listen": "test",
+			"script": {
+				"type": "text/javascript",
+				"exec": [
+					""
+				]
+			}
+		}
+	],
+	"variable": [
+		{
+			"key": "id",
+			"value": "1"
+		},
+		{
+			"key": "base_url",
+			"value": "https://postman-rest-api-learner.glitch.me/"
+		}
+	]
+}
